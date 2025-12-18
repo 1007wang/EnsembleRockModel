@@ -10,30 +10,30 @@ from .grad_cam import GradCAM
 
 
 class ResNet50Model(nn.Module):
-    """使用ResNet50作为骨干网络的岩石分类模型"""
+    """Rock classification model using ResNet50 as backbone network"""
     def __init__(self, num_classes, use_attention=True):
         super(ResNet50Model, self).__init__()
-        # 使用预训练的ResNet50
+        # Use pre-trained ResNet50
         self.resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
         
-        # 特征层通道数
+        # Feature layer channel sizes
         self.channel_sizes = [256, 512, 1024, 2048]
         
-        # 注意力机制
+        # Attention mechanism
         self.use_attention = use_attention
         if use_attention:
             self.enhanced_rock_attention = EnhancedRockAttention(in_channels=2048)
         
-        # 特征金字塔网络
+        # Feature Pyramid Network
         self.fpn = FPN(
             in_channels_list=self.channel_sizes,
             out_channels=512
         )
         
-        # 特征融合
+        # Feature fusion
         self.fusion = FeatureFusion(channels=512)
         
-        # 分类头
+        # Classification head
         self.fc = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
@@ -48,37 +48,37 @@ class ResNet50Model(nn.Module):
             nn.Linear(512, num_classes)
         )
         
-        # 冻结部分层
+        # Freeze some layers
         for param in list(self.resnet.parameters())[:-100]:
             param.requires_grad = False
             
-        # 损失函数
+        # Loss function
         self.criterion = EnhancedCombinedLoss(num_classes=num_classes)
         
-        # GradCAM可视化 - 使用最后一个卷积层作为目标层
+        # GradCAM visualization - use last convolutional layer as target layer
         self.grad_cam = GradCAM(self, self.resnet.layer4)
     
     def _extract_features(self, x):
-        """提取ResNet50的各个阶段特征"""
+        """Extract features from each stage of ResNet50"""
         features = []
         
-        # 阶段1：初始卷积和池化
+        # Stage 1: Initial convolution and pooling
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
         x = self.resnet.relu(x)
         x = self.resnet.maxpool(x)
         
-        # 阶段2-5
-        x = self.resnet.layer1(x)  # 256通道
+        # Stages 2-5
+        x = self.resnet.layer1(x)  # 256 channels
         features.append(x)
         
-        x = self.resnet.layer2(x)  # 512通道
+        x = self.resnet.layer2(x)  # 512 channels
         features.append(x)
         
-        x = self.resnet.layer3(x)  # 1024通道
+        x = self.resnet.layer3(x)  # 1024 channels
         features.append(x)
         
-        x = self.resnet.layer4(x)  # 2048通道
+        x = self.resnet.layer4(x)  # 2048 channels
         if self.use_attention:
             x = self.enhanced_rock_attention(x)
         features.append(x)
@@ -86,24 +86,24 @@ class ResNet50Model(nn.Module):
         return features
     
     def forward(self, x, labels=None, alpha=1.0, class_accuracies=None):
-        # 提取特征
+        # Extract features
         features = self._extract_features(x)
         
-        # 特征金字塔增强
+        # Feature pyramid enhancement
         fpn_features = self.fpn(features)
         
-        # 特征融合
+        # Feature fusion
         fused_features = self.fusion(fpn_features[0], fpn_features[-1])
         
-        # 分类
+        # Classification
         logits = self.fc(fused_features)
         
-        # 如果是训练模式且提供了标签，计算损失
+        # If in training mode and labels provided, calculate loss
         if self.training and labels is not None:
             loss = self.criterion(
-                fused_features,  # 特征
-                logits,          # 分类输出
-                labels,          # 标签
+                fused_features,  # Features
+                logits,          # Classification output
+                labels,          # Labels
                 class_accuracies=class_accuracies,
             )
             return logits, loss
@@ -111,18 +111,18 @@ class ResNet50Model(nn.Module):
         return logits, fused_features
 
 class EfficientNetB4Model(nn.Module):
-    """使用EfficientNetB4作为骨干网络的岩石分类模型"""
+    """Rock classification model using EfficientNetB4 as backbone network"""
     def __init__(self, num_classes, use_attention=True, attention_type='minimal'):
         super(EfficientNetB4Model, self).__init__()
-        # 使用预训练的EfficientNetB4
+        # Use pre-trained EfficientNetB4
         self.efficientnet = models.efficientnet_b4(
             weights=models.EfficientNet_B4_Weights.IMAGENET1K_V1
         )
         
-        # EfficientNetB4的特征层通道数
+        # EfficientNetB4 feature layer channel sizes
         self.channel_sizes = [24, 56, 160, 1792]
         
-        # 注意力机制 - 支持多种attention类型
+        # Attention mechanism - support multiple attention types
         self.use_attention = use_attention
         self.attention_type = attention_type
         if use_attention:
@@ -133,10 +133,10 @@ class EfficientNetB4Model(nn.Module):
             elif attention_type == 'rock':
                 self.enhanced_rock_attention = EfficientNetRockAttention(in_channels=1792)
             else:
-                # 默认使用最保守的版本
+                # Default to most conservative version
                 self.enhanced_rock_attention = EfficientNetMinimalAttention(in_channels=1792)
         
-        # 特征预处理层（统一空间维度和通道数）
+        # Feature preprocessing layers (unify spatial dimensions and channel counts)
         self.preprocess = nn.ModuleList([
             nn.Sequential(
                 nn.Conv2d(24, 256, 1),
@@ -164,16 +164,16 @@ class EfficientNetB4Model(nn.Module):
             )
         ])
         
-        # 特征金字塔网络
+        # Feature Pyramid Network
         self.fpn = FPN(
             in_channels_list=[256, 512, 1024, 2048],
             out_channels=512
         )
         
-        # 特征融合
+        # Feature fusion
         self.fusion = FeatureFusion(channels=512)
         
-        # 分类头
+        # Classification head
         self.fc = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
@@ -188,42 +188,42 @@ class EfficientNetB4Model(nn.Module):
             nn.Linear(512, num_classes)
         )
         
-        # 冻结部分层
+        # Freeze some layers
         for param in list(self.efficientnet.parameters())[:-100]:
             param.requires_grad = False
             
-        # 损失函数
+        # Loss function
         self.criterion = EnhancedCombinedLoss(num_classes=num_classes)
         
-        # GradCAM可视化 - 使用最后一个特征层作为目标层
-        # EfficientNet的特征提取器通常是一个Sequential，获取最后一层
+        # GradCAM visualization - use last feature layer as target layer
+        # EfficientNet's feature extractor is usually a Sequential, get the last layer
         target_layer = self.efficientnet.features[-1]
         self.grad_cam = GradCAM(self, target_layer)
     
     def _extract_features(self, x):
-        """提取EfficientNetB4的中间特征"""
+        """Extract intermediate features from EfficientNetB4"""
         features = []
         current_feature = x
         
-        # 获取特征提取器的所有层
+        # Get all layers from feature extractor
         layers = list(self.efficientnet.features)
         
-        # 第一阶段：24通道
+        # Stage 1: 24 channels
         for layer in layers[:2]:
             current_feature = layer(current_feature)
         features.append(self.preprocess[0](current_feature))
         
-        # 第二阶段：56通道
+        # Stage 2: 56 channels
         for layer in layers[2:4]:
             current_feature = layer(current_feature)
         features.append(self.preprocess[1](current_feature))
         
-        # 第三阶段：160通道
+        # Stage 3: 160 channels
         for layer in layers[4:6]:
             current_feature = layer(current_feature)
         features.append(self.preprocess[2](current_feature))
         
-        # 第四阶段：1792通道
+        # Stage 4: 1792 channels
         for layer in layers[6:]:
             current_feature = layer(current_feature)
             
@@ -234,28 +234,28 @@ class EfficientNetB4Model(nn.Module):
         return features
     
     def forward(self, x, labels=None, alpha=1.0, class_accuracies=None):
-        # 确保输入尺寸正确 (EfficientNet-B4最佳输入尺寸为380x380)
+        # Ensure input size is correct (EfficientNet-B4 optimal input size is 380x380)
         if x.size(2) != 380 or x.size(3) != 380:
             x = F.interpolate(x, size=(380, 380), mode='bilinear', align_corners=False)
             
-        # 提取特征
+        # Extract features
         features = self._extract_features(x)
         
-        # 特征金字塔增强
+        # Feature pyramid enhancement
         fpn_features = self.fpn(features)
         
-        # 特征融合
+        # Feature fusion
         fused_features = self.fusion(fpn_features[0], fpn_features[-1])
         
-        # 分类
+        # Classification
         logits = self.fc(fused_features)
         
-        # 如果是训练模式且提供了标签，计算损失
+        # If in training mode and labels provided, calculate loss
         if self.training and labels is not None:
             loss = self.criterion(
-                fused_features,  # 特征
-                logits,          # 分类输出
-                labels,          # 标签
+                fused_features,  # Features
+                logits,          # Classification output
+                labels,          # Labels
                 class_accuracies=class_accuracies
             )
             return logits, loss
@@ -263,34 +263,34 @@ class EfficientNetB4Model(nn.Module):
         return logits, fused_features
 
 class InceptionV3Model(nn.Module):
-    """使用InceptionV3作为骨干网络的岩石分类模型"""
+    """Rock classification model using InceptionV3 as backbone network"""
     def __init__(self, num_classes, use_attention=True):
         super(InceptionV3Model, self).__init__()
-        # 使用预训练的Inception V3
+        # Use pre-trained Inception V3
         self.inception = models.inception_v3(
             weights=models.Inception_V3_Weights.IMAGENET1K_V1,
             aux_logits=True
         )
         
-        # 冻结部分层
+        # Freeze some layers
         for param in list(self.inception.parameters())[:-150]:
             param.requires_grad = False
         
-        # 注意力机制
+        # Attention mechanism
         self.use_attention = use_attention
         if use_attention:
             self.enhanced_rock_attention = EnhancedRockAttention(in_channels=2048)
         
-        # 特征金字塔
+        # Feature pyramid
         self.fpn = FPN(
             in_channels_list=[288, 768, 1280, 2048],
             out_channels=512
         )
         
-        # 特征融合
+        # Feature fusion
         self.fusion = FeatureFusion(channels=512)
         
-        # 分类头
+        # Classification head
         self.fc = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
@@ -305,7 +305,7 @@ class InceptionV3Model(nn.Module):
             nn.Linear(512, num_classes)
         )
         
-        # 辅助分类器
+        # Auxiliary classifier
         self.aux_fc = nn.Sequential(
             nn.Linear(768, 512),
             nn.BatchNorm1d(512),
@@ -314,17 +314,17 @@ class InceptionV3Model(nn.Module):
             nn.Linear(512, num_classes)
         )
         
-        # 损失函数
+        # Loss function
         self.criterion = EnhancedCombinedLoss(num_classes=num_classes)
         
-        # GradCAM可视化 - 使用最后一个混合层作为目标层
+        # GradCAM visualization - use last mixed layer as target layer
         self.grad_cam = GradCAM(self, self.inception.Mixed_7c)
     
     def _extract_features(self, x):
-        """提取Inception V3的中间特征"""
+        """Extract intermediate features from Inception V3"""
         features = []
         
-        # 第一阶段：Conv2d layers
+        # Stage 1: Conv2d layers
         x = self.inception.Conv2d_1a_3x3(x)  # 32
         x = self.inception.Conv2d_2a_3x3(x)  # 32
         x = self.inception.Conv2d_2b_3x3(x)  # 64
@@ -333,13 +333,13 @@ class InceptionV3Model(nn.Module):
         x = self.inception.Conv2d_4a_3x3(x)  # 192
         x = F.max_pool2d(x, kernel_size=3, stride=2)
         
-        # 第二阶段：Mixed_5 layers (288 channels)
+        # Stage 2: Mixed_5 layers (288 channels)
         x = self.inception.Mixed_5b(x)  # 256
         x = self.inception.Mixed_5c(x)  # 288
         x = self.inception.Mixed_5d(x)  # 288
         features.append(x)  # 288 channels
         
-        # 第三阶段：Mixed_6 layers (768 channels)
+        # Stage 3: Mixed_6 layers (768 channels)
         x = self.inception.Mixed_6a(x)  # 768
         x = self.inception.Mixed_6b(x)  # 768
         x = self.inception.Mixed_6c(x)  # 768
@@ -347,18 +347,18 @@ class InceptionV3Model(nn.Module):
         x = self.inception.Mixed_6e(x)  # 768
         features.append(x)  # 768 channels
         
-        # 保存辅助分类器的输入
+        # Save input for auxiliary classifier
         aux = x if self.training and self.inception.aux_logits else None
         
-        # 第四阶段：Mixed_7a (1280 channels)
+        # Stage 4: Mixed_7a (1280 channels)
         x = self.inception.Mixed_7a(x)  # 1280
         features.append(x)  # 1280 channels
         
-        # 第五阶段：Mixed_7b/c (2048 channels)
+        # Stage 5: Mixed_7b/c (2048 channels)
         x = self.inception.Mixed_7b(x)  # 2048
         x = self.inception.Mixed_7c(x)  # 2048
         
-        # 应用注意力机制
+        # Apply attention mechanism
         if self.use_attention:
             x = self.enhanced_rock_attention(x)
         features.append(x)  # 2048 channels
@@ -366,39 +366,39 @@ class InceptionV3Model(nn.Module):
         return features, aux
     
     def forward(self, x, labels=None, alpha=1.0, class_accuracies=None):
-        # 确保输入尺寸正确 (InceptionV3需要299x299)
+        # Ensure input size is correct (InceptionV3 requires 299x299)
         if x.size(2) != 299 or x.size(3) != 299:
             x = F.interpolate(x, size=(299, 299), mode='bilinear', align_corners=False)
             
-        # 提取特征
+        # Extract features
         features, aux = self._extract_features(x)
         
-        # 特征金字塔增强
+        # Feature pyramid enhancement
         fpn_features = self.fpn(features)
         
-        # 特征融合
+        # Feature fusion
         fused_features = self.fusion(fpn_features[0], fpn_features[-1])
         
-        # 分类
+        # Classification
         logits = self.fc(fused_features)
         
-        # 辅助分类器（如果在训练阶段）
+        # Auxiliary classifier (if in training phase)
         if self.training and aux is not None:
             aux_logits = self.aux_fc(F.adaptive_avg_pool2d(aux, (1, 1)).view(aux.size(0), -1))
         else:
             aux_logits = None
         
-        # 如果是训练模式且提供了标签，计算损失
+        # If in training mode and labels provided, calculate loss
         if self.training and labels is not None:
-            # 主分类器损失
+            # Main classifier loss
             main_loss = self.criterion(
-                fused_features,  # 特征
-                logits,          # 分类输出
-                labels,          # 标签
+                fused_features,  # Features
+                logits,          # Classification output
+                labels,          # Labels
                 class_accuracies=class_accuracies
             )
             
-            # 辅助分类器损失（如果有辅助分类器）
+            # Auxiliary classifier loss (if auxiliary classifier exists)
             if aux_logits is not None:
                 aux_loss = 0.3 * F.cross_entropy(aux_logits, labels)
                 loss = main_loss + aux_loss
@@ -409,9 +409,9 @@ class InceptionV3Model(nn.Module):
         
         return logits, fused_features
 
-# 无注意力机制的模型版本
+# Model versions without attention mechanism
 def create_model_without_attention(model_name, num_classes):
-    """创建不带注意力机制的模型"""
+    """Create model without attention mechanism"""
     if model_name == 'resnet50':
         return ResNet50Model(num_classes, use_attention=False)
     elif model_name == 'resnet50_optimized':
@@ -421,11 +421,11 @@ def create_model_without_attention(model_name, num_classes):
     elif model_name == 'inceptionv3':
         return InceptionV3Model(num_classes, use_attention=False)
     else:
-        raise ValueError(f"不支持的模型名称: {model_name}")
+        raise ValueError(f"Unsupported model name: {model_name}")
 
-# 创建模型函数
+# Model creation function
 def create_model(model_name, num_classes, use_attention=True):
-    """创建指定类型的模型"""
+    """Create model of specified type"""
     if model_name == 'resnet50':
         return ResNet50Model(num_classes, use_attention)
     elif model_name == 'resnet50_optimized':
@@ -435,42 +435,42 @@ def create_model(model_name, num_classes, use_attention=True):
     elif model_name == 'inceptionv3':
         return InceptionV3Model(num_classes, use_attention)
     elif model_name == 'ensemble':
-        # 导入EnsembleModel并返回
+        # Import EnsembleModel and return
         from .ensemble_model import EnsembleModel
         return EnsembleModel(num_classes)
     else:
-        raise ValueError(f"不支持的模型名称: {model_name}")
+        raise ValueError(f"Unsupported model name: {model_name}")
 
 class OptimizedResNet50Model(nn.Module):
-    """优化版ResNet50模型 - 专门针对岩石分类任务优化"""
+    """Optimized ResNet50 model - specifically optimized for rock classification task"""
     def __init__(self, num_classes, use_attention=True):
         super(OptimizedResNet50Model, self).__init__()
         
-        # 使用预训练的ResNet50
+        # Use pre-trained ResNet50
         self.resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
         
-        # 特征层通道数
+        # Feature layer channel sizes
         self.channel_sizes = [256, 512, 1024, 2048]
         
-        # 注意力机制 - 使用新的优化版注意力
+        # Attention mechanism - use new optimized attention
         self.use_attention = use_attention
         if use_attention:
             from .attention import ResNet50EnhancedAttention
             self.enhanced_attention = ResNet50EnhancedAttention(in_channels=2048)
             
-            # 在中间层也添加注意力（可选）
+            # Also add attention to intermediate layers (optional)
             self.mid_attention_1024 = ResNet50EnhancedAttention(in_channels=1024)
             self.mid_attention_512 = ResNet50EnhancedAttention(in_channels=512)
         
-        # 改进的特征金字塔网络
+        # Improved Feature Pyramid Network
         self.fpn = FPN(
             in_channels_list=self.channel_sizes,
             out_channels=512
         )
         
-        # 多层次特征融合
+        # Multi-level feature fusion
         self.multi_level_fusion = nn.Sequential(
-            nn.Conv2d(512 * 4, 1024, 1),  # 融合4个层次的特征
+            nn.Conv2d(512 * 4, 1024, 1),  # Fuse features from 4 levels
             nn.BatchNorm2d(1024),
             nn.ReLU(inplace=True),
             nn.Conv2d(1024, 512, 1),
@@ -478,62 +478,62 @@ class OptimizedResNet50Model(nn.Module):
             nn.ReLU(inplace=True)
         )
         
-        # 增强的分类头
+        # Enhanced classification head
         self.classifier = nn.Sequential(
-            # 全局平均池化 + 全局最大池化
+            # Global average pooling + global max pooling
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
             
-            # 第一层
+            # First layer
             nn.Linear(512, 1024),
             nn.BatchNorm1d(1024),
             nn.ReLU(inplace=True),
             nn.Dropout(0.35),
             
-            # 第二层
+            # Second layer
             nn.Linear(1024, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(inplace=True),
             nn.Dropout(0.25),
             
-            # 第三层（辅助特征提取）
+            # Third layer (auxiliary feature extraction)
             nn.Linear(512, 256),
             nn.BatchNorm1d(256),
             nn.ReLU(inplace=True),
             nn.Dropout(0.15),
             
-            # 输出层
+            # Output layer
             nn.Linear(256, num_classes)
         )
         
-        # 辅助分类头（用于深度监督）
+        # Auxiliary classification head (for deep supervision)
         self.aux_classifier = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(1024, 512),  # 1024通道来自layer3
+            nn.Linear(1024, 512),  # 1024 channels from layer3
             nn.ReLU(inplace=True),
             nn.Dropout(0.3),
             nn.Linear(512, num_classes)
         )
         
-        # 冻结策略 - 更加精细的冻结
+        # Freezing strategy - more fine-grained freezing
         self._freeze_layers()
         
-        # 使用优化的损失函数
+        # Use optimized loss function
         from .losses import ResNet50OptimizedLoss
         self.criterion = ResNet50OptimizedLoss(num_classes=num_classes, feat_dim=512)
         
-        # GradCAM可视化
+        # GradCAM visualization
         self.grad_cam = GradCAM(self, self.resnet.layer4)
     
     def _freeze_layers(self):
-        """精细化的层冻结策略"""
-        # 冻结早期层，保留后期层的可训练性
+        """Fine-grained layer freezing strategy"""
+        # Freeze early layers, preserve trainability of later layers
         layers_to_freeze = [
             self.resnet.conv1,
             self.resnet.bn1,
             self.resnet.layer1,
-            # layer2前半部分冻结
+            # Freeze first half of layer2
             *list(self.resnet.layer2.children())[:2],
         ]
         
@@ -542,30 +542,30 @@ class OptimizedResNet50Model(nn.Module):
                 param.requires_grad = False
     
     def _extract_features(self, x):
-        """提取ResNet50的各个阶段特征"""
+        """Extract features from each stage of ResNet50"""
         features = []
         
-        # 阶段1：初始卷积和池化
+        # Stage 1: Initial convolution and pooling
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
         x = self.resnet.relu(x)
         x = self.resnet.maxpool(x)
         
-        # 阶段2-5，在关键层应用注意力
-        x = self.resnet.layer1(x)  # 256通道
+        # Stages 2-5, apply attention at key layers
+        x = self.resnet.layer1(x)  # 256 channels
         features.append(x)
         
-        x = self.resnet.layer2(x)  # 512通道
+        x = self.resnet.layer2(x)  # 512 channels
         if self.use_attention:
             x = self.mid_attention_512(x)
         features.append(x)
         
-        x = self.resnet.layer3(x)  # 1024通道
+        x = self.resnet.layer3(x)  # 1024 channels
         if self.use_attention:
             x = self.mid_attention_1024(x)
         features.append(x)
         
-        x = self.resnet.layer4(x)  # 2048通道
+        x = self.resnet.layer4(x)  # 2048 channels
         if self.use_attention:
             x = self.enhanced_attention(x)
         features.append(x)
@@ -575,14 +575,14 @@ class OptimizedResNet50Model(nn.Module):
     def forward(self, x, labels=None, alpha=1.0, class_accuracies=None):
         batch_size = x.size(0)
         
-        # 提取多层次特征
+        # Extract multi-level features
         features = self._extract_features(x)
         
-        # 特征金字塔增强
+        # Feature pyramid enhancement
         fpn_features = self.fpn(features)
         
-        # 多层次特征融合
-        # 将所有FPN特征调整到相同尺寸并拼接
+        # Multi-level feature fusion
+        # Adjust all FPN features to same size and concatenate
         target_size = fpn_features[0].shape[2:]
         aligned_features = []
         
@@ -591,24 +591,24 @@ class OptimizedResNet50Model(nn.Module):
                 feat = F.interpolate(feat, size=target_size, mode='bilinear', align_corners=False)
             aligned_features.append(feat)
         
-        # 拼接所有特征
+        # Concatenate all features
         fused_features = torch.cat(aligned_features, dim=1)
         fused_features = self.multi_level_fusion(fused_features)
         
-        # 主分类
+        # Main classification
         logits = self.classifier(fused_features)
         
-        # 辅助分类（使用layer3的特征）
+        # Auxiliary classification (using layer3 features)
         aux_logits = None
         if self.training:
-            aux_logits = self.aux_classifier(features[2])  # layer3特征
+            aux_logits = self.aux_classifier(features[2])  # layer3 features
         
-        # 如果是训练模式且提供了标签，计算损失
+        # If in training mode and labels provided, calculate loss
         if self.training and labels is not None:
-            # 主损失
+            # Main loss
             main_loss = self.criterion(fused_features, logits, labels, class_accuracies)
             
-            # 辅助损失
+            # Auxiliary loss
             aux_loss = 0
             if aux_logits is not None:
                 aux_loss = F.cross_entropy(aux_logits, labels) * 0.3

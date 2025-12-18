@@ -11,7 +11,7 @@ class GradCAM:
         self.gradients = None
         self.activations = None
 
-        # 注册钩子
+        # Register hooks
         self.target_layer.register_forward_hook(self.save_activation)
         self.target_layer.register_full_backward_hook(self.save_gradient)
 
@@ -22,16 +22,16 @@ class GradCAM:
         self.gradients = grad_output[0]
 
     def generate_cam(self, input_tensor, class_idx):
-        """生成Grad-CAM热力图"""
-        # 保存原始模型状态
+        """Generate Grad-CAM heatmap"""
+        # Save original model state
         was_training = self.model.training
-        self.model.eval()  # 设置为评估模式
+        self.model.eval()  # Set to evaluation mode
 
-        # 确保输入需要梯度
+        # Ensure input requires gradients
         input_tensor = input_tensor.clone().detach().requires_grad_(True)
 
         try:
-            # 前向传播
+            # Forward pass
             output = self.model(input_tensor)
             if isinstance(output, tuple):
                 output = output[0]
@@ -39,27 +39,27 @@ class GradCAM:
             if output.dim() == 1:
                 output = output.unsqueeze(0)
 
-            # 清零梯度
+            # Zero gradients
             if input_tensor.grad is not None:
                 input_tensor.grad.zero_()
             self.model.zero_grad()
 
-            # 创建one-hot编码
+            # Create one-hot encoding
             one_hot = torch.zeros_like(output)
             one_hot[0][class_idx] = 1
 
-            # 反向传播
+            # Backward pass
             output.backward(gradient=one_hot, retain_graph=True)
 
-            # 确保梯度和激活值都存在
+            # Ensure gradients and activations exist
             if self.gradients is None or self.activations is None:
-                raise ValueError("未能获取梯度或激活值")
+                raise ValueError("Failed to obtain gradients or activations")
 
-            # 计算权重
+            # Calculate weights
             weights = torch.mean(self.gradients, dim=(2, 3))[0]
             cam = torch.zeros(self.activations.shape[2:], dtype=torch.float32).to(input_tensor.device)
 
-            # 生成CAM
+            # Generate CAM
             for i, w in enumerate(weights):
                 cam += w * self.activations[0, i]
 
@@ -70,22 +70,22 @@ class GradCAM:
             cam = cv2.resize(cam, (input_tensor.shape[2], input_tensor.shape[3]))
 
         finally:
-            # 恢复模型原始状态
+            # Restore original model state
             self.model.train(was_training)
 
         return cam
 
     def overlay_cam(self, image, cam, alpha=0.5):
-        """将CAM叠加到原始图像上"""
-        # 归一化图像
+        """Overlay CAM onto original image"""
+        # Normalize image
         image = (image - np.min(image)) / (np.max(image) - np.min(image))
         
-        # 创建热力图
+        # Create heatmap
         heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
         heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
         heatmap = np.float32(heatmap) / 255
         
-        # 叠加图像
+        # Overlay image
         overlayed_image = heatmap * alpha + image * (1 - alpha)
         overlayed_image = overlayed_image / np.max(overlayed_image)
         

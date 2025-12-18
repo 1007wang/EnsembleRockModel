@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class SupConLoss(nn.Module):
-    """监督对比学习损失函数"""
+    """Supervised contrastive learning loss function"""
     def __init__(self, temperature=0.07, base_temperature=0.07):
         super(SupConLoss, self).__init__()
         self.temperature = temperature
@@ -12,32 +12,32 @@ class SupConLoss(nn.Module):
     def forward(self, features, labels):
         """
         Args:
-            features: 形状为 [batch_size, n_views, ...] 的特征向量
-            labels: 形状为 [batch_size] 的标签
+            features: Feature vectors with shape [batch_size, n_views, ...]
+            labels: Labels with shape [batch_size]
         Returns:
-            对比学习损失
+            Contrastive learning loss
         """
         device = features.device
         
-        # 确保输入维度正确
+        # Ensure input dimensions are correct
         if features.dim() == 2:
             features = features.unsqueeze(1)
         
         batch_size = features.shape[0]
         
-        # 确保标签维度正确
+        # Ensure label dimensions are correct
         if labels.shape[0] != batch_size:
-            raise ValueError(f'特征数量 ({batch_size}) 与标签数量 ({labels.shape[0]}) 不匹配')
+            raise ValueError(f'Number of features ({batch_size}) does not match number of labels ({labels.shape[0]})')
             
         labels = labels.contiguous().view(-1, 1)
         mask = torch.eq(labels, labels.T).float().to(device)
 
-        # 计算特征之间的相似度
+        # Calculate similarity between features
         features = F.normalize(features, dim=2)
-        features = features.view(batch_size, -1)  # 展平特征
+        features = features.view(batch_size, -1)  # Flatten features
         similarity_matrix = torch.matmul(features, features.T)
         
-        # 对角线上的元素是自身的相似度，应该排除
+        # Diagonal elements are self-similarity, should be excluded
         logits_mask = torch.scatter(
             torch.ones_like(mask),
             1,
@@ -47,27 +47,27 @@ class SupConLoss(nn.Module):
         
         mask = mask * logits_mask
         
-        # 计算正样本对的损失
+        # Calculate loss for positive pairs
         exp_similarity = torch.exp(similarity_matrix / self.temperature)
         
-        # 计算每个样本的正样本对数量
+        # Calculate number of positive pairs per sample
         num_positives_per_row = mask.sum(1)
         
-        # 避免除零
+        # Avoid division by zero
         denominator = exp_similarity.sum(1) - exp_similarity.diagonal()
         log_prob = torch.log(exp_similarity + 1e-7) - torch.log(denominator.view(-1, 1) + 1e-7)
         
-        # 只考虑正样本对的log probability
+        # Only consider log probability of positive pairs
         mean_log_prob_pos = (mask * log_prob).sum(1) / (num_positives_per_row + 1e-7)
         
-        # 缩放损失
+        # Scale loss
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_pos
         loss = loss.mean()
         
         return loss
 
 class DomainAdversarialLoss(nn.Module):
-    """领域对抗损失"""
+    """Domain adversarial loss"""
     def __init__(self, input_dim, hidden_dim=1024):
         super(DomainAdversarialLoss, self).__init__()
         
@@ -82,16 +82,16 @@ class DomainAdversarialLoss(nn.Module):
     def forward(self, features, alpha=1.0):
         """
         Args:
-            features: 特征向量
-            alpha: 梯度反转层的系数
+            features: Feature vectors
+            alpha: Coefficient for gradient reversal layer
         Returns:
-            domain_loss: 领域判别损失
+            domain_loss: Domain discrimination loss
         """
-        # 梯度反转层
+        # Gradient reversal layer
         reverse_features = GradientReversal.apply(features, alpha)
         domain_pred = self.domain_classifier(reverse_features)
         
-        # 创建领域标签（0表示源域，1表示目标域）
+        # Create domain labels (0 for source domain, 1 for target domain)
         batch_size = features.size(0)
         domain_labels = torch.cat([
             torch.zeros(batch_size // 2),
@@ -105,7 +105,7 @@ class DomainAdversarialLoss(nn.Module):
         return domain_loss
 
 class GradientReversal(torch.autograd.Function):
-    """梯度反转层"""
+    """Gradient reversal layer"""
     @staticmethod
     def forward(ctx, x, alpha):
         ctx.alpha = alpha
@@ -116,7 +116,7 @@ class GradientReversal(torch.autograd.Function):
         return -ctx.alpha * grad_output, None
 
 class AdaptiveContrastiveLoss(nn.Module):
-    """自适应对比学习损失"""
+    """Adaptive contrastive learning loss"""
     def __init__(self, temperature=0.07, memory_bank_size=4096):
         super(AdaptiveContrastiveLoss, self).__init__()
         self.temperature = temperature
@@ -130,7 +130,7 @@ class AdaptiveContrastiveLoss(nn.Module):
         batch_size = features.shape[0]
         feature_dim = features.shape[1]
         
-        # 初始化记忆库
+        # Initialize memory bank
         if self.memory_bank is None:
             self.memory_bank = torch.zeros(
                 (self.memory_bank_size, feature_dim),
@@ -142,9 +142,9 @@ class AdaptiveContrastiveLoss(nn.Module):
                 dtype=labels.dtype
             )
         
-        # 更新记忆库
+        # Update memory bank
         ptr = int(self.memory_ptr)
-        # 计算可以更新的样本数量
+        # Calculate number of samples that can be updated
         update_size = min(batch_size, self.memory_bank_size - ptr)
         if update_size > 0:
             self.memory_bank[ptr:ptr + update_size] = features[:update_size]
@@ -154,21 +154,21 @@ class AdaptiveContrastiveLoss(nn.Module):
     def forward(self, features, labels, update_memory=True):
         """
         Args:
-            features: 特征向量 [batch_size, feature_dim]
-            labels: 标签 [batch_size]
-            update_memory: 是否更新记忆库
+            features: Feature vectors [batch_size, feature_dim]
+            labels: Labels [batch_size]
+            update_memory: Whether to update memory bank
         """
         if update_memory:
             self._update_memory_bank(features.detach(), labels)
         
-        # 使用当前batch的特征计算对比损失
+        # Calculate contrastive loss using current batch features
         return SupConLoss(temperature=self.temperature)(
             features.unsqueeze(1),  # [batch_size, 1, feature_dim]
             labels
         )
 
 class CombinedAdaptiveContrastiveLoss(nn.Module):
-    """组合自适应对比损失"""
+    """Combined adaptive contrastive loss"""
     def __init__(self, feature_dim, num_classes, 
                  temperature=0.07, memory_bank_size=4096):
         super(CombinedAdaptiveContrastiveLoss, self).__init__()
@@ -184,10 +184,10 @@ class CombinedAdaptiveContrastiveLoss(nn.Module):
     def forward(self, features, labels, domain_features, alpha=1.0):
         """
         Args:
-            features: 分类特征
-            labels: 类别标签
-            domain_features: 领域特征
-            alpha: 领域自适应的权重
+            features: Classification features
+            labels: Class labels
+            domain_features: Domain features
+            alpha: Weight for domain adaptation
         """
         contrastive_loss = self.contrastive(features, labels)
         domain_loss = self.domain_adversarial(domain_features, alpha)

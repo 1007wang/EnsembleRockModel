@@ -16,43 +16,43 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import math
 
-# 解决OpenMP库冲突问题
+# Resolve OpenMP library conflict issues
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 def setup_matplotlib():
-    """配置matplotlib支持中文显示"""
+    """Configure matplotlib to support Chinese font display"""
     import matplotlib
-    # 强制使用Agg后端，避免GUI相关问题
+    # Force use of Agg backend to avoid GUI-related issues
     matplotlib.use('Agg')
     
     import matplotlib.pyplot as plt
     import matplotlib.font_manager as fm
     
-    # 尝试设置中文字体
+    # Try to set up Chinese fonts
     try:
-        # 尝试使用系统中的中文字体
+        # Try to use Chinese fonts available in the system
         plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun', 'Arial Unicode MS', 'DejaVu Sans']
-        plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+        plt.rcParams['axes.unicode_minus'] = False  # Fix minus sign display issue
         
-        # 检查是否成功设置了中文字体
+        # Check if Chinese fonts were successfully set
         fonts = [f.name for f in fm.fontManager.ttflist]
         chinese_fonts = [f for f in fonts if '黑体' in f or '雅黑' in f or 'SimSun' in f or 'SimHei' in f]
         
         if not chinese_fonts:
-            # 如果没有找到中文字体，使用英文
-            print("警告: 未找到中文字体，将使用英文显示")
+            # If no Chinese fonts found, use English
+            print("Warning: No Chinese fonts found, will use English display")
             use_chinese = False
         else:
-            print(f"找到中文字体: {chinese_fonts[0]}")
+            print(f"Found Chinese font: {chinese_fonts[0]}")
             use_chinese = True
     except Exception as e:
-        print(f"设置中文字体时出错: {str(e)}，将使用英文显示")
+        print(f"Error setting up Chinese fonts: {str(e)}, will use English display")
         use_chinese = False
     
     return use_chinese
 
 def setup_logger(log_dir):
-    """设置日志"""
+    """Set up logging"""
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
         
@@ -69,7 +69,7 @@ def setup_logger(log_dir):
     return logger
 
 class EarlyStopping:
-    """早停机制"""
+    """Early stopping mechanism"""
     def __init__(self, patience=20, min_delta=0.001):
         self.patience = patience
         self.min_delta = min_delta
@@ -81,22 +81,22 @@ class EarlyStopping:
         
     def __call__(self, val_loss, val_acc, epoch):
         """
-        检查是否应该早停
+        Check if early stopping should be triggered
         
-        参数:
-            val_loss: 验证损失
-            val_acc: 验证准确率
-            epoch: 当前轮次
+        Args:
+            val_loss: Validation loss
+            val_acc: Validation accuracy
+            epoch: Current epoch
         
-        返回:
-            bool: 是否应该早停
+        Returns:
+            bool: Whether early stopping should be triggered
         """
-        # 第一次调用时初始化best_acc
+        # Initialize best_acc on first call
         if self.best_acc is None:
             self.best_acc = val_acc
             self.best_epoch = epoch
             return False
-        # 如果验证准确率提高，更新最佳准确率和轮次
+        # If validation accuracy improves, update best accuracy and epoch
         if val_acc > self.best_acc + self.min_delta:
             self.best_acc = val_acc
             self.best_epoch = epoch
@@ -104,7 +104,7 @@ class EarlyStopping:
         else:
             self.counter += 1
             
-        # 如果连续patience轮验证准确率没有提高，触发早停
+        # If validation accuracy hasn't improved for patience consecutive epochs, trigger early stopping
         if self.counter >= self.patience:
             self.early_stop = True
             
@@ -120,7 +120,7 @@ class LossMonitor:
         if torch.isnan(loss) or torch.isinf(loss):
             self.consecutive_invalid += 1
             if self.consecutive_invalid >= self.threshold and self.last_valid_state is not None:
-                print("检测到连续无效损失，恢复到上一个有效状态")
+                print("Detected consecutive invalid losses, restoring to last valid state")
                 model.load_state_dict(self.last_valid_state['model'])
                 optimizer.load_state_dict(self.last_valid_state['optimizer'])
                 return False
@@ -133,17 +133,17 @@ class LossMonitor:
         return True
 
 def train_epoch(model, train_loader, optimizer, scaler, device, epoch, total_epochs, gradient_clip, class_accuracies=None, accumulation_steps=1):
-    """训练一个epoch"""
+    """Train for one epoch"""
     model.train()
     total_loss = 0
     correct = 0
     total = 0
     
-    # 计算当前的域自适应权重
+    # Calculate current domain adaptation weight
     alpha = 2.0 / (1.0 + np.exp(-10 * epoch / total_epochs)) - 1.0
     
-    # 计算当前的对比学习权重
-    contrast_weight = min(0.1 * (epoch / 10), 0.5)  # 逐渐增加对比学习的权重
+    # Calculate current contrastive learning weight
+    contrast_weight = min(0.1 * (epoch / 10), 0.5)  # Gradually increase contrastive learning weight
     
     with tqdm(train_loader, desc='Training', ncols=100) as pbar:
         for idx, (inputs, labels) in enumerate(pbar):
@@ -151,9 +151,9 @@ def train_epoch(model, train_loader, optimizer, scaler, device, epoch, total_epo
             labels = labels.to(device, non_blocking=True)
             
             with autocast(device_type='cuda:1' if torch.cuda.is_available() else 'cpu'):
-                # 根据模型类型决定是否传入contrast_weight参数
+                # Determine whether to pass contrast_weight parameter based on model type
                 if isinstance(model, EnsembleModel):
-                    # EnsembleModel支持contrast_weight参数
+                    # EnsembleModel supports contrast_weight parameter
                     outputs, loss = model(
                         inputs, 
                         labels, 
@@ -162,7 +162,7 @@ def train_epoch(model, train_loader, optimizer, scaler, device, epoch, total_epo
                         contrast_weight=contrast_weight
                     )
                 else:
-                    # 其他模型不支持contrast_weight参数
+                    # Other models do not support contrast_weight parameter
                     outputs, loss = model(
                         inputs, 
                         labels, 
@@ -170,17 +170,17 @@ def train_epoch(model, train_loader, optimizer, scaler, device, epoch, total_epo
                         class_accuracies=class_accuracies
                     )
                 
-                # 检查损失值是否有效
+                # Check if loss value is valid
                 if torch.isnan(loss) or torch.isinf(loss):
                     print(f"Warning: Invalid loss value detected: {loss}")
                     optimizer.zero_grad(set_to_none=True)
                     continue
             
-            # 反向传播
+            # Backward propagation
             scaler.scale(loss).backward()
             
             if (idx + 1) % accumulation_steps == 0:
-                # 添加梯度裁剪
+                # Add gradient clipping
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
                 
@@ -188,13 +188,13 @@ def train_epoch(model, train_loader, optimizer, scaler, device, epoch, total_epo
                 scaler.update()
                 optimizer.zero_grad(set_to_none=True)
             
-            # 统计
+            # Statistics
             total_loss += loss.item() * accumulation_steps
             _, predicted = outputs.max(1)
             total += labels.size(0)
             correct += predicted.eq(labels).sum().item()
             
-            # 更新进度条
+            # Update progress bar
             pbar.set_postfix({
                 'loss': f'{total_loss/(idx+1):.4f}',
                 'acc': f'{100.*correct/total:.2f}%',
@@ -207,25 +207,25 @@ def train_epoch(model, train_loader, optimizer, scaler, device, epoch, total_epo
     return total_loss / len(train_loader), correct / total
 
 def validate(model, val_loader, device):
-    """验证模型性能"""
+    """Validate model performance"""
     model.eval()
     val_loss = 0.0
     all_preds = []
     all_labels = []
     
-    print("\n开始验证...")
+    print("\nStarting validation...")
     with torch.no_grad():
-        # 使用tqdm创建进度条，设置leave=True使进度条保留
-        for inputs, labels in tqdm(val_loader, desc="验证进度", leave=True, ncols=100):
+        # Use tqdm to create progress bar, set leave=True to keep progress bar
+        for inputs, labels in tqdm(val_loader, desc="Validation progress", leave=True, ncols=100):
             inputs = inputs.to(device)
             labels = labels.to(device)
             
-            # 根据设备类型确定autocast的device_type
+            # Determine autocast device_type based on device type
             device_type = 'cuda:1' if device.type == 'cuda:1' else 'cpu'
             
             with autocast(device_type=device_type):
                 outputs = model(inputs)
-                # 处理outputs为元组的情况，取第一个元素作为logits
+                # Handle case where outputs is a tuple, take first element as logits
                 if isinstance(outputs, tuple):
                     outputs = outputs[0]
                 
@@ -237,20 +237,20 @@ def validate(model, val_loader, device):
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
     
-    # 转换为numpy数组
+    # Convert to numpy arrays
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
     
-    # 计算准确率
+    # Calculate accuracy
     accuracy = np.mean(all_preds == all_labels)
     
-    # 计算混淆矩阵
+    # Calculate confusion matrix
     num_classes = len(np.unique(all_labels))
     confusion_mat = np.zeros((num_classes, num_classes), dtype=np.int64)
     for t, p in zip(all_labels, all_preds):
         confusion_mat[t, p] += 1
     
-    # 计算每个类别的准确率
+    # Calculate accuracy for each class
     class_accuracies = {}
     class_precision = {}
     class_recall = {}
@@ -258,43 +258,43 @@ def validate(model, val_loader, device):
     class_support = {}
     
     for class_id in range(num_classes):
-        # 该类别的样本总数
+        # Total number of samples for this class
         class_total = np.sum(all_labels == class_id)
         if class_total > 0:
-            # 该类别被正确分类的样本数
+            # Number of correctly classified samples for this class
             class_correct = confusion_mat[class_id, class_id]
-            # 准确率 = 正确分类的样本数 / 该类别的样本总数
+            # Accuracy = correctly classified samples / total samples for this class
             class_accuracies[class_id] = class_correct / class_total
             
-            # 计算精确率 (precision) = TP / (TP + FP)
-            # TP = 正确预测为该类别的样本数
-            # FP = 错误预测为该类别的样本数
+            # Calculate precision = TP / (TP + FP)
+            # TP = number of samples correctly predicted as this class
+            # FP = number of samples incorrectly predicted as this class
             predicted_as_class = np.sum(confusion_mat[:, class_id])
             if predicted_as_class > 0:
                 class_precision[class_id] = confusion_mat[class_id, class_id] / predicted_as_class
             else:
                 class_precision[class_id] = 0.0
             
-            # 计算召回率 (recall) = TP / (TP + FN)
-            # TP = 正确预测为该类别的样本数
-            # FN = 该类别被错误预测为其他类别的样本数
+            # Calculate recall = TP / (TP + FN)
+            # TP = number of samples correctly predicted as this class
+            # FN = number of samples of this class incorrectly predicted as other classes
             class_recall[class_id] = confusion_mat[class_id, class_id] / class_total
             
-            # 计算F1分数 = 2 * (precision * recall) / (precision + recall)
+            # Calculate F1 score = 2 * (precision * recall) / (precision + recall)
             if class_precision[class_id] + class_recall[class_id] > 0:
                 class_f1[class_id] = 2 * (class_precision[class_id] * class_recall[class_id]) / (class_precision[class_id] + class_recall[class_id])
             else:
                 class_f1[class_id] = 0.0
                 
-            # 记录支持度（样本数）
+            # Record support (number of samples)
             class_support[class_id] = int(class_total)
     
-    # 计算宏平均和加权平均指标
+    # Calculate macro average and weighted average metrics
     macro_precision = np.mean(list(class_precision.values()))
     macro_recall = np.mean(list(class_recall.values()))
     macro_f1 = np.mean(list(class_f1.values()))
     
-    # 计算加权平均，考虑每个类别的样本数
+    # Calculate weighted average, considering sample count for each class
     weights = np.array([class_support[i] for i in range(num_classes)])
     weights = weights / np.sum(weights)
     
@@ -302,7 +302,7 @@ def validate(model, val_loader, device):
     weighted_recall = np.sum([class_recall[i] * weights[i] for i in range(num_classes)])
     weighted_f1 = np.sum([class_f1[i] * weights[i] for i in range(num_classes)])
     
-    # 返回验证结果
+    # Return validation results
     return {
         'accuracy': accuracy,
         'loss': val_loss / len(val_loader),
@@ -321,59 +321,59 @@ def validate(model, val_loader, device):
     }
 
 def generate_low_accuracy_class_heatmaps(model, val_loader, device, class_mapping, accuracy_threshold=0.75, max_per_class=5, max_total=50, save_dir='visualization'):
-    """生成低准确率类别的热力图"""
-    print("\n开始生成低准确率类别的热力图...")
+    """Generate heatmaps for low accuracy classes"""
+    print("\nStarting to generate heatmaps for low accuracy classes...")
     
-    # 确保模型处于评估模式
+    # Ensure model is in evaluation mode
     model.eval()
     
-    # 创建反向映射（id到名称）
+    # Create reverse mapping (id to name)
     id_to_name = {v: k for k, v in class_mapping.items()}
     
-    # 首先进行一次验证，获取每个类别的准确率
+    # First perform validation to get accuracy for each class
     val_results = validate(model, val_loader, device)
     class_accuracies = val_results['class_accuracies']
     
-    # 找出准确率低于阈值的类别
+    # Find classes with accuracy below threshold
     low_accuracy_classes = {class_id: acc for class_id, acc in class_accuracies.items() if acc < accuracy_threshold}
     
-    # 如果没有低于阈值的类别，选择准确率最低的10个类别
+    # If no classes below threshold, select the 10 classes with lowest accuracy
     if not low_accuracy_classes:
-        print(f"没有找到准确率低于{accuracy_threshold*100:.1f}%的类别，将选择准确率最低的10个类别")
+        print(f"No classes found with accuracy below {accuracy_threshold*100:.1f}%, will select the 10 classes with lowest accuracy")
         sorted_accuracies = sorted(class_accuracies.items(), key=lambda x: x[1])
         low_accuracy_classes = {class_id: acc for class_id, acc in sorted_accuracies[:10]}
     
-    print(f"找到{len(low_accuracy_classes)}个低准确率类别:")
+    print(f"Found {len(low_accuracy_classes)} low accuracy classes:")
     for class_id, accuracy in low_accuracy_classes.items():
         class_name = id_to_name[class_id]
         print(f"  - {class_name}: {accuracy*100:.2f}%")
     
-    # 收集这些类别的错误预测样本
+    # Collect incorrectly predicted samples for these classes
     incorrect_samples = {class_id: [] for class_id in low_accuracy_classes.keys()}
     
     model.eval()
-    print("\n开始收集错误预测样本...")
+    print("\nStarting to collect incorrectly predicted samples...")
     with torch.no_grad():
-        # 使用tqdm创建进度条，设置leave=True使进度条保留
-        for inputs, labels in tqdm(val_loader, desc="收集错误预测样本", leave=True, ncols=100):
+        # Use tqdm to create progress bar, set leave=True to keep progress bar
+        for inputs, labels in tqdm(val_loader, desc="Collecting incorrect predictions", leave=True, ncols=100):
             inputs = inputs.to(device)
             labels = labels.to(device)
             
             outputs = model(inputs)
-            # 处理outputs为元组的情况，取第一个元素作为logits
+            # Handle case where outputs is a tuple, take first element as logits
             if isinstance(outputs, tuple):
                 outputs = outputs[0]
                 
             _, preds = torch.max(outputs, 1)
             
-            # 找出预测错误的样本
+            # Find incorrectly predicted samples
             for i, (label, pred) in enumerate(zip(labels, preds)):
                 label_item = label.item()
                 pred_item = pred.item()
                 
-                # 如果是低准确率类别且预测错误
+                # If it's a low accuracy class and prediction is incorrect
                 if label_item in low_accuracy_classes and label_item != pred_item:
-                    # 只保存指定数量的样本
+                    # Only save specified number of samples
                     if len(incorrect_samples[label_item]) < max_per_class:
                         incorrect_samples[label_item].append({
                             'image': inputs[i].cpu(),
@@ -381,116 +381,116 @@ def generate_low_accuracy_class_heatmaps(model, val_loader, device, class_mappin
                             'pred_label': pred_item
                         })
     
-    # 确保可视化目录存在
+    # Ensure visualization directory exists
     os.makedirs(save_dir, exist_ok=True)
     
-    # 为每个低准确率类别生成热力图
+    # Generate heatmaps for each low accuracy class
     total_generated = 0
     
     for class_id, samples in incorrect_samples.items():
         class_name = id_to_name[class_id]
         accuracy = low_accuracy_classes[class_id]
         
-        print(f"\n为类别 {class_name} (准确率: {accuracy*100:.2f}%) 生成热力图")
+        print(f"\nGenerating heatmaps for class {class_name} (accuracy: {accuracy*100:.2f}%)")
         
-        # 限制每个类别的热力图数量
+        # Limit number of heatmaps per class
         for i, sample in enumerate(samples):
-            # 限制总热力图数量
+            # Limit total number of heatmaps
             if total_generated >= max_total:
-                print(f"已达到最大热力图数量限制 ({max_total})")
+                print(f"Reached maximum heatmap limit ({max_total})")
                 break
                 
             try:
-                # 生成Grad-CAM
+                # Generate Grad-CAM
                 with torch.enable_grad():
                     cam = model.grad_cam.generate_cam(sample['image'].unsqueeze(0).to(device), sample['true_label'])
                 
-                # 处理图像
+                # Process image
                 image = sample['image'].numpy().transpose(1, 2, 0)
                 image = (image - np.min(image)) / (np.max(image) - np.min(image))
                 overlayed_image = model.grad_cam.overlay_cam(image, cam)
                 
-                # 构建安全的文件名
+                # Build safe filename
                 safe_class_name = get_class_basename(class_name).replace('\\', '_').replace('/', '_')
                 save_path = os.path.join(save_dir, f'grad_cam_{safe_class_name}_acc{accuracy*100:.1f}_sample{i+1}.png')
                 
-                # 获取预测类别名称
+                # Get predicted class name
                 pred_class_name = get_class_basename(id_to_name[sample['pred_label']])
                 
-                # 保存热力图
+                # Save heatmap
                 plt.figure(figsize=(10, 10))
                 plt.imshow(overlayed_image)
                 
-                # 获取真实类别的最后部分
+                # Get last part of true class name
                 true_class_display = get_class_basename(class_name)
                 
-                plt.title(f'真实类别: {true_class_display}\n预测类别: {pred_class_name}\n类别准确率: {accuracy*100:.2f}%')
+                plt.title(f'True Class: {true_class_display}\nPredicted Class: {pred_class_name}\nClass Accuracy: {accuracy*100:.2f}%')
                 plt.axis('off')
                 plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
-                plt.close()  # 立即关闭图像释放内存
+                plt.close()  # Immediately close image to release memory
                 
-                print(f"已保存热力图: {save_path}")
+                print(f"Saved heatmap: {save_path}")
                 total_generated += 1
                 
             except Exception as e:
-                print(f"生成类别 {class_name} 的热力图时发生错误: {str(e)}")
+                print(f"Error generating heatmap for class {class_name}: {str(e)}")
                 continue
             
-            # 每处理5张图像清理一次内存
+            # Clear memory every 5 images
             if total_generated % 5 == 0:
                 torch.cuda.empty_cache()
     
-    print(f"\n热力图生成完成，共生成 {total_generated} 张热力图")
+    print(f"\nHeatmap generation completed, generated {total_generated} heatmaps in total")
 
 def visualize_confusion_matrix(confusion_matrix, class_names, epoch, save_dir='visualization', use_chinese=False):
-    """可视化混淆矩阵"""
-    # 确保保存目录存在
+    """Visualize confusion matrix"""
+    # Ensure save directory exists
     os.makedirs(save_dir, exist_ok=True)
     
-    # 创建混淆矩阵图
+    # Create confusion matrix plot
     plt.figure(figsize=(20, 16))
     
-    # 获取类别的基本名称
+    # Get base names of classes
     display_names = [get_class_basename(name) for name in class_names]
     
-    # 创建热力图
+    # Create heatmap
     sns.heatmap(
         confusion_matrix, 
-        annot=False,  # 不显示数值，太多类别会重叠
+        annot=False,  # Don't show values, too many classes would overlap
         cmap='Blues',
         fmt='d', 
         xticklabels=display_names,
         yticklabels=display_names
     )
     
-    # 根据是否支持中文选择标题
+    # Choose title based on whether Chinese is supported
     if use_chinese:
-        plt.title(f'第{epoch+1}轮 混淆矩阵', fontsize=16)
-        plt.xlabel('预测类别', fontsize=14)
-        plt.ylabel('真实类别', fontsize=14)
+        plt.title(f'Epoch {epoch+1} Confusion Matrix', fontsize=16)
+        plt.xlabel('Predicted Class', fontsize=14)
+        plt.ylabel('True Class', fontsize=14)
     else:
         plt.title(f'Confusion Matrix - Epoch {epoch+1}', fontsize=16)
         plt.xlabel('Predicted Class', fontsize=14)
         plt.ylabel('True Class', fontsize=14)
     
-    # 调整标签大小和旋转角度
+    # Adjust label size and rotation angle
     plt.xticks(rotation=45, ha='right', fontsize=8)
     plt.yticks(rotation=0, fontsize=8)
     
-    # 保存图像
+    # Save image
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, f'confusion_matrix_epoch_{epoch+1}.png'), dpi=300)
     plt.close()
 
 def analyze_performance(val_results, class_mapping, epoch, save_dir='visualization', use_chinese=False):
-    """分析模型性能，生成性能报告"""
-    # 确保保存目录存在
+    """Analyze model performance and generate performance report"""
+    # Ensure save directory exists
     os.makedirs(save_dir, exist_ok=True)
     
-    # 创建反向映射（id到名称）
+    # Create reverse mapping (id to name)
     id_to_name = {v: get_class_basename(k) for k, v in class_mapping.items()}
     
-    # 获取每个类别的性能指标
+    # Get performance metrics for each class
     class_metrics = {}
     for class_id, accuracy in val_results['class_accuracies'].items():
         class_name = id_to_name[class_id]
@@ -502,20 +502,20 @@ def analyze_performance(val_results, class_mapping, epoch, save_dir='visualizati
             'support': val_results['class_support'][class_id]
         }
     
-    # 按F1分数排序
+    # Sort by F1 score
     sorted_classes = sorted(class_metrics.items(), key=lambda x: x[1]['f1'], reverse=True)
     
-    # 创建性能报告
+    # Create performance report
     report_file = os.path.join(save_dir, f'performance_report_epoch_{epoch+1}.txt')
     with open(report_file, 'w', encoding='utf-8') as f:
-        # 写入总体性能
+        # Write overall performance
         if use_chinese:
-            f.write(f"第{epoch+1}轮模型性能报告\n")
+            f.write(f"Model Performance Report - Epoch {epoch+1}\n")
             f.write("="*50 + "\n\n")
-            f.write(f"总体准确率: {val_results['accuracy']*100:.2f}%\n")
-            f.write(f"宏平均F1: {val_results['macro_f1']:.4f}\n")
-            f.write(f"加权平均F1: {val_results['weighted_f1']:.4f}\n\n")
-            f.write("各类别性能指标:\n")
+            f.write(f"Overall Accuracy: {val_results['accuracy']*100:.2f}%\n")
+            f.write(f"Macro F1: {val_results['macro_f1']:.4f}\n")
+            f.write(f"Weighted F1: {val_results['weighted_f1']:.4f}\n\n")
+            f.write("Class-wise Metrics:\n")
             f.write("-"*50 + "\n")
         else:
             f.write(f"Model Performance Report - Epoch {epoch+1}\n")
@@ -526,15 +526,15 @@ def analyze_performance(val_results, class_mapping, epoch, save_dir='visualizati
             f.write("Class-wise Metrics:\n")
             f.write("-"*50 + "\n")
         
-        # 写入每个类别的性能
+        # Write performance for each class
         for class_name, metrics in sorted_classes:
             if use_chinese:
-                f.write(f"类别: {class_name}\n")
-                f.write(f"  准确率: {metrics['accuracy']*100:.2f}%\n")
-                f.write(f"  精确率: {metrics['precision']:.4f}\n")
-                f.write(f"  召回率: {metrics['recall']:.4f}\n")
-                f.write(f"  F1分数: {metrics['f1']:.4f}\n")
-                f.write(f"  样本数: {metrics['support']}\n")
+                f.write(f"Class: {class_name}\n")
+                f.write(f"  Accuracy: {metrics['accuracy']*100:.2f}%\n")
+                f.write(f"  Precision: {metrics['precision']:.4f}\n")
+                f.write(f"  Recall: {metrics['recall']:.4f}\n")
+                f.write(f"  F1 Score: {metrics['f1']:.4f}\n")
+                f.write(f"  Support: {metrics['support']}\n")
             else:
                 f.write(f"Class: {class_name}\n")
                 f.write(f"  Accuracy: {metrics['accuracy']*100:.2f}%\n")
@@ -544,33 +544,33 @@ def analyze_performance(val_results, class_mapping, epoch, save_dir='visualizati
                 f.write(f"  Support: {metrics['support']}\n")
             f.write("-"*50 + "\n")
         
-        # 写入性能最好和最差的类别
+        # Write best and worst performing classes
         best_classes = sorted_classes[:5]
         worst_classes = sorted_classes[-5:]
         
         if use_chinese:
-            f.write("\n性能最好的5个类别:\n")
+            f.write("\nTop 5 Best Performing Classes:\n")
         else:
             f.write("\nTop 5 Best Performing Classes:\n")
         f.write("-"*50 + "\n")
         for i, (class_name, metrics) in enumerate(best_classes):
             if use_chinese:
-                f.write(f"{i+1}. {class_name} - F1: {metrics['f1']:.4f}, 准确率: {metrics['accuracy']*100:.2f}%\n")
+                f.write(f"{i+1}. {class_name} - F1: {metrics['f1']:.4f}, Accuracy: {metrics['accuracy']*100:.2f}%\n")
             else:
                 f.write(f"{i+1}. {class_name} - F1: {metrics['f1']:.4f}, Accuracy: {metrics['accuracy']*100:.2f}%\n")
         
         if use_chinese:
-            f.write("\n性能最差的5个类别:\n")
+            f.write("\nTop 5 Worst Performing Classes:\n")
         else:
             f.write("\nTop 5 Worst Performing Classes:\n")
         f.write("-"*50 + "\n")
         for i, (class_name, metrics) in enumerate(reversed(worst_classes)):
             if use_chinese:
-                f.write(f"{i+1}. {class_name} - F1: {metrics['f1']:.4f}, 准确率: {metrics['accuracy']*100:.2f}%\n")
+                f.write(f"{i+1}. {class_name} - F1: {metrics['f1']:.4f}, Accuracy: {metrics['accuracy']*100:.2f}%\n")
             else:
                 f.write(f"{i+1}. {class_name} - F1: {metrics['f1']:.4f}, Accuracy: {metrics['accuracy']*100:.2f}%\n")
     
-    # 可视化性能最差的类别
+    # Visualize worst performing classes
     plt.figure(figsize=(12, 8))
     worst_class_names = [name for name, _ in reversed(worst_classes)]
     worst_class_f1 = [metrics['f1'] for _, metrics in reversed(worst_classes)]
@@ -579,9 +579,9 @@ def analyze_performance(val_results, class_mapping, epoch, save_dir='visualizati
     plt.xticks(range(len(worst_class_names)), worst_class_names, rotation=45, ha='right')
     
     if use_chinese:
-        plt.title(f'第{epoch+1}轮性能最差的5个类别的F1分数')
-        plt.xlabel('类别')
-        plt.ylabel('F1分数')
+        plt.title(f'F1 Scores of 5 Worst Performing Classes - Epoch {epoch+1}')
+        plt.xlabel('Class')
+        plt.ylabel('F1 Score')
     else:
         plt.title(f'F1 Scores of 5 Worst Performing Classes - Epoch {epoch+1}')
         plt.xlabel('Class')
@@ -591,7 +591,7 @@ def analyze_performance(val_results, class_mapping, epoch, save_dir='visualizati
     plt.savefig(os.path.join(save_dir, f'worst_classes_epoch_{epoch+1}.png'))
     plt.close()
     
-    # 可视化性能最好的类别
+    # Visualize best performing classes
     plt.figure(figsize=(12, 8))
     best_class_names = [name for name, _ in best_classes]
     best_class_f1 = [metrics['f1'] for _, metrics in best_classes]
@@ -600,9 +600,9 @@ def analyze_performance(val_results, class_mapping, epoch, save_dir='visualizati
     plt.xticks(range(len(best_class_names)), best_class_names, rotation=45, ha='right')
     
     if use_chinese:
-        plt.title(f'第{epoch+1}轮性能最好的5个类别的F1分数')
-        plt.xlabel('类别')
-        plt.ylabel('F1分数')
+        plt.title(f'F1 Scores of 5 Best Performing Classes - Epoch {epoch+1}')
+        plt.xlabel('Class')
+        plt.ylabel('F1 Score')
     else:
         plt.title(f'F1 Scores of 5 Best Performing Classes - Epoch {epoch+1}')
         plt.xlabel('Class')
@@ -892,21 +892,21 @@ def plot_learning_curves(train_history, save_dir='visualization', use_chinese=Fa
     plt.close()
 
 def analyze_confusion_pairs(confusion_matrix, class_mapping, top_n=20, save_dir='visualization', use_chinese=False):
-    """分析混淆矩阵，找出最容易混淆的类别对"""
-    # 确保保存目录存在
+    """Analyze confusion matrix to find most confused class pairs"""
+    # Ensure save directory exists
     os.makedirs(save_dir, exist_ok=True)
     
-    # 创建反向映射（id到名称）
+    # Create reverse mapping (id to name)
     id_to_name = {v: get_class_basename(k) for k, v in class_mapping.items()}
     
-    # 找出非对角线元素中值最大的元素（最容易混淆的类别对）
+    # Find elements with largest values in off-diagonal elements (most confused class pairs)
     num_classes = confusion_matrix.shape[0]
     confusion_pairs = []
     
     for i in range(num_classes):
         for j in range(num_classes):
             if i != j and confusion_matrix[i, j] > 0:
-                # 计算混淆率（被错误分类的样本数 / 该类别的总样本数）
+                # Calculate confusion rate (number of misclassified samples / total samples for this class)
                 true_class_total = confusion_matrix[i].sum()
                 error_rate = confusion_matrix[i, j] / true_class_total if true_class_total > 0 else 0
                 
@@ -920,30 +920,30 @@ def analyze_confusion_pairs(confusion_matrix, class_mapping, top_n=20, save_dir=
                     'true_class_total': int(true_class_total)
                 })
     
-    # 按混淆次数排序
+    # Sort by confusion count
     confusion_pairs_by_count = sorted(confusion_pairs, key=lambda x: x['count'], reverse=True)[:top_n]
     
-    # 按错误率排序
+    # Sort by error rate
     confusion_pairs_by_rate = sorted(confusion_pairs, key=lambda x: x['error_rate'], reverse=True)[:top_n]
     
-    # 生成报告
+    # Generate report
     report_file = os.path.join(save_dir, 'confusion_pairs_analysis.txt')
     with open(report_file, 'w', encoding='utf-8') as f:
         if use_chinese:
-            f.write("混淆类别对分析\n")
+            f.write("Confusion Pairs Analysis\n")
             f.write("="*50 + "\n\n")
             
-            f.write(f"按混淆次数排序的前{top_n}个类别对:\n")
+            f.write(f"Top {top_n} Confusion Pairs by Count:\n")
             f.write("-"*50 + "\n")
             for i, pair in enumerate(confusion_pairs_by_count):
-                f.write(f"{i+1}. 真实类别: {pair['true_class_name']} -> 预测类别: {pair['pred_class_name']}\n")
-                f.write(f"   混淆次数: {pair['count']}, 错误率: {pair['error_rate']*100:.2f}%, 真实类别总样本数: {pair['true_class_total']}\n")
+                f.write(f"{i+1}. True Class: {pair['true_class_name']} -> Predicted Class: {pair['pred_class_name']}\n")
+                f.write(f"   Confusion Count: {pair['count']}, Error Rate: {pair['error_rate']*100:.2f}%, True Class Total: {pair['true_class_total']}\n")
             
-            f.write("\n按错误率排序的前{top_n}个类别对:\n")
+            f.write(f"\nTop {top_n} Confusion Pairs by Error Rate:\n")
             f.write("-"*50 + "\n")
             for i, pair in enumerate(confusion_pairs_by_rate):
-                f.write(f"{i+1}. 真实类别: {pair['true_class_name']} -> 预测类别: {pair['pred_class_name']}\n")
-                f.write(f"   混淆次数: {pair['count']}, 错误率: {pair['error_rate']*100:.2f}%, 真实类别总样本数: {pair['true_class_total']}\n")
+                f.write(f"{i+1}. True Class: {pair['true_class_name']} -> Predicted Class: {pair['pred_class_name']}\n")
+                f.write(f"   Confusion Count: {pair['count']}, Error Rate: {pair['error_rate']*100:.2f}%, True Class Total: {pair['true_class_total']}\n")
         else:
             f.write("Confusion Pairs Analysis\n")
             f.write("="*50 + "\n\n")
@@ -960,10 +960,10 @@ def analyze_confusion_pairs(confusion_matrix, class_mapping, top_n=20, save_dir=
                 f.write(f"{i+1}. True Class: {pair['true_class_name']} -> Predicted Class: {pair['pred_class_name']}\n")
                 f.write(f"   Confusion Count: {pair['count']}, Error Rate: {pair['error_rate']*100:.2f}%, True Class Total: {pair['true_class_total']}\n")
     
-    # 可视化混淆对
+    # Visualize confusion pairs
     plt.figure(figsize=(14, 8))
     
-    # 绘制前10个混淆对的柱状图
+    # Plot bar chart of top 10 confusion pairs
     top_10_pairs = confusion_pairs_by_count[:10]
     pair_labels = [f"{p['true_class_name']}->{p['pred_class_name']}" for p in top_10_pairs]
     pair_counts = [p['count'] for p in top_10_pairs]
@@ -972,9 +972,9 @@ def analyze_confusion_pairs(confusion_matrix, class_mapping, top_n=20, save_dir=
     plt.xticks(range(len(pair_labels)), pair_labels, rotation=45, ha='right')
     
     if use_chinese:
-        plt.title('最容易混淆的10个类别对')
-        plt.xlabel('类别对')
-        plt.ylabel('混淆次数')
+        plt.title('Top 10 Most Confused Class Pairs')
+        plt.xlabel('Class Pairs')
+        plt.ylabel('Confusion Count')
     else:
         plt.title('Top 10 Most Confused Class Pairs')
         plt.xlabel('Class Pairs')
@@ -987,7 +987,7 @@ def analyze_confusion_pairs(confusion_matrix, class_mapping, top_n=20, save_dir=
     return report_file
 
 def get_class_basename(class_name):
-    """从类别路径中提取基本名称，处理不同的路径分隔符"""
+    """Extract base name from class path, handling different path separators"""
     if '\\' in class_name:
         return class_name.split('\\')[-1]
     elif '/' in class_name:
@@ -996,65 +996,65 @@ def get_class_basename(class_name):
         return class_name
 
 def parse_args():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='岩石分类模型训练与评估')
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Rock classification model training and evaluation')
     
-    # 配置文件支持
+    # Configuration file support
     parser.add_argument('--config', type=str, default=None, 
-                        help='JSON配置文件路径，会覆盖命令行参数')
+                        help='JSON configuration file path, will override command line arguments')
     
-    # 模型选择参数
+    # Model selection parameters
     parser.add_argument('--model_type', type=str, default='ensemble',
                        choices=['ensemble', 'resnet50', 'resnet50_optimized', 'efficientnet_b4', 'inceptionv3'],
-                       help='选择要训练的模型类型')
+                       help='Select model type to train')
     parser.add_argument('--no_attention', action='store_true',
-                       help='设置此参数将禁用注意力机制')
+                       help='Set this flag to disable attention mechanism')
     
-    # 学习率调度器参数
+    # Learning rate scheduler parameters
     parser.add_argument('--scheduler_type', type=str, default='multistage',
                        choices=['multistage', 'cosine'],
-                       help='选择学习率调度器类型，multistage为多阶段，cosine为单一余弦')
+                       help='Select learning rate scheduler type, multistage for multi-stage, cosine for single cosine')
     parser.add_argument('--cosine_T_max', type=int, default=None,
-                       help='余弦调度器的T_max参数，默认等于总轮次')
+                       help='T_max parameter for cosine scheduler, defaults to total epochs')
     parser.add_argument('--cosine_eta_min', type=float, default=1e-6,
-                       help='余弦调度器的最小学习率')
+                       help='Minimum learning rate for cosine scheduler')
     parser.add_argument('--cosine_warmup_epochs', type=int, default=10,
-                       help='余弦调度器的预热轮次')
+                       help='Warmup epochs for cosine scheduler')
     
-    # 训练参数
-    parser.add_argument('--data_dir', type=str, default='processed_data', help='数据目录路径')
-    parser.add_argument('--batch_size', type=int, default=16, help='批次大小')
-    parser.add_argument('--num_epochs', type=int, default=200, help='训练轮数')
-    parser.add_argument('--learning_rate', type=float, default=0.0001, help='学习率')
-    parser.add_argument('--weight_decay', type=float, default=0.0005, help='权重衰减')
-    parser.add_argument('--patience', type=int, default=20, help='早停耐心值')
-    parser.add_argument('--accumulation_steps', type=int, default=2, help='梯度累积步数')
+    # Training parameters
+    parser.add_argument('--data_dir', type=str, default='processed_data', help='Data directory path')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
+    parser.add_argument('--num_epochs', type=int, default=200, help='Number of training epochs')
+    parser.add_argument('--learning_rate', type=float, default=0.0001, help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0.0005, help='Weight decay')
+    parser.add_argument('--patience', type=int, default=20, help='Early stopping patience value')
+    parser.add_argument('--accumulation_steps', type=int, default=2, help='Gradient accumulation steps')
     
-    # 评估参数
+    # Evaluation parameters
     parser.add_argument('--accuracy_threshold', type=float, default=0.8, 
-                        help='热力图生成的准确率阈值，低于此阈值的类别将生成热力图')
+                        help='Accuracy threshold for heatmap generation, classes below this threshold will generate heatmaps')
     parser.add_argument('--max_per_class', type=int, default=10, 
-                        help='每个类别最多生成的热力图数量')
+                        help='Maximum number of heatmaps to generate per class')
     parser.add_argument('--max_total', type=int, default=50, 
-                        help='总共最多生成的热力图数量')
+                        help='Maximum total number of heatmaps to generate')
     
-    # 优化版ResNet50专用参数
+    # Optimized ResNet50 specific parameters
     parser.add_argument('--mining_ratio', type=float, default=0.25,
-                       help='困难样本挖掘比例 (仅resnet50_optimized)')
+                       help='Hard example mining ratio (resnet50_optimized only)')
     parser.add_argument('--triangular_margin', type=float, default=0.8,
-                       help='三角损失边界 (仅resnet50_optimized)')
+                       help='Triangular loss margin (resnet50_optimized only)')
     parser.add_argument('--gradient_clip', type=float, default=1.0,
-                       help='梯度裁剪阈值')
+                       help='Gradient clipping threshold')
     
-    # 其他参数
-    parser.add_argument('--eval_only', action='store_true', help='仅进行评估，不训练')
-    parser.add_argument('--checkpoint', type=str, default=None, help='用于评估的检查点路径')
+    # Other parameters
+    parser.add_argument('--eval_only', action='store_true', help='Only perform evaluation, do not train')
+    parser.add_argument('--checkpoint', type=str, default=None, help='Checkpoint path for evaluation')
     
     return parser.parse_args()
 
 class MultiStageScheduler:
-    """性能自适应的多阶段学习率调度器
-    根据模型性能动态调整学习率策略，而非固定轮次
+    """Performance-adaptive multi-stage learning rate scheduler
+    Dynamically adjusts learning rate strategy based on model performance, rather than fixed epochs
     """
     def __init__(self, optimizer, num_epochs, init_lr, min_lr):
         self.optimizer = optimizer
@@ -1063,105 +1063,105 @@ class MultiStageScheduler:
         self.min_lr = min_lr
         self.current_epoch = 0
         
-        # 各阶段最小轮次数要求 - 增加最小轮次要求
+        # Minimum epochs requirement for each stage - increased minimum epochs requirement
         self.min_epochs_per_stage = {
-            'warmup': max(5, int(num_epochs * 0.05)),  # 至少5轮或总轮次的5%
-            'aggressive': max(15, int(num_epochs * 0.15)),  # 至少15轮或总轮次的15%
-            'refinement': max(20, int(num_epochs * 0.2)),  # 至少20轮或总轮次的20%
-            'fine_tuning': max(10, int(num_epochs * 0.1))   # 至少10轮或总轮次的10%
+            'warmup': max(5, int(num_epochs * 0.05)),  # At least 5 epochs or 5% of total epochs
+            'aggressive': max(15, int(num_epochs * 0.15)),  # At least 15 epochs or 15% of total epochs
+            'refinement': max(20, int(num_epochs * 0.2)),  # At least 20 epochs or 20% of total epochs
+            'fine_tuning': max(10, int(num_epochs * 0.1))   # At least 10 epochs or 10% of total epochs
         }
         
-        # 当前所处阶段
+        # Current stage
         self.current_stage = 'warmup'
         self.current_stage_epochs = 0
         
-        # 用于跟踪性能和学习率变化
+        # Track performance and learning rate changes
         self.accuracy_history = []
         self.lr_history = []
         self.best_accuracy = 0
         self.plateau_counter = 0
         
-        # 阶段切换条件 - 增加容忍度
-        self.stagnation_threshold = 5  # 性能停滞轮次阈值增加到5
-        self.improvement_threshold = 0.002  # 性能提升阈值降低，更容易检测到进步
+        # Stage switching conditions - increased tolerance
+        self.stagnation_threshold = 5  # Performance stagnation epoch threshold increased to 5
+        self.improvement_threshold = 0.002  # Performance improvement threshold lowered, easier to detect progress
         
-        # 各阶段使用的调度器
+        # Schedulers used for each stage
         self.schedulers = {}
         self._setup_schedulers()
         
-        # 记录上一个阶段结束时的学习率
+        # Record learning rate at end of previous stage
         self.last_stage_lr = init_lr
         
-        # 设置学习率保护机制
+        # Set up learning rate protection mechanism
         self.lr_protection = {
-            'max_decrease_factor': 0.5,  # 单次最大下降比例
-            'min_lr_factor': 0.1,  # 相对于初始学习率的最小值比例
-            'recovery_factor': 1.2  # 性能提升时的恢复系数
+            'max_decrease_factor': 0.5,  # Maximum decrease ratio per step
+            'min_lr_factor': 0.1,  # Minimum ratio relative to initial learning rate
+            'recovery_factor': 1.2  # Recovery coefficient when performance improves
         }
         
-        # 记录各个阶段的边界，用于可视化
+        # Record boundaries of each stage for visualization
         self.stage_boundaries = {
             'warmup_end': 0,
             'aggressive_end': 0,
             'refinement_end': 0
         }
         
-        # 平滑过渡机制
-        self.transition_steps = 3  # 阶段过渡的平滑步数
+        # Smooth transition mechanism
+        self.transition_steps = 3  # Number of smooth steps for stage transition
         self.in_transition = False
         self.transition_from = None
         self.transition_to = None
         self.transition_step = 0
         
     def _setup_schedulers(self):
-        """设置各阶段的学习率调度器"""
-        # 预热阶段：线性增加到初始学习率，更平缓
+        """Set up learning rate schedulers for each stage"""
+        # Warmup stage: linear increase to initial learning rate, smoother
         self.schedulers['warmup'] = torch.optim.lr_scheduler.LinearLR(
             self.optimizer,
-            start_factor=0.2,  # 提高起始因子
+            start_factor=0.2,  # Increased starting factor
             end_factor=1.0,
             total_iters=self.min_epochs_per_stage['warmup']
         )
         
-        # 积极探索阶段：1cycle政策，参数更加平滑
+        # Aggressive exploration stage: 1cycle policy, smoother parameters
         self.schedulers['aggressive'] = torch.optim.lr_scheduler.OneCycleLR(
             self.optimizer,
-            max_lr=self.init_lr * 1.5,  # 降低最大学习率，防止过大波动
+            max_lr=self.init_lr * 1.5,  # Reduced maximum learning rate to prevent excessive fluctuations
             total_steps=self.min_epochs_per_stage['aggressive'] * 2,
-            pct_start=0.4,  # 增加上升比例
+            pct_start=0.4,  # Increased rise proportion
             anneal_strategy='cos',
-            div_factor=5.0,  # 减小初始下降幅度
-            final_div_factor=4.0  # 减小最终下降幅度
+            div_factor=5.0,  # Reduced initial decrease magnitude
+            final_div_factor=4.0  # Reduced final decrease magnitude
         )
         
-        # 细化阶段：余弦退火，使用更大的周期和更高的最小值
+        # Refinement stage: cosine annealing with larger period and higher minimum
         self.schedulers['refinement'] = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer,
-            T_max=self.min_epochs_per_stage['refinement'] * 3,  # 增加周期长度
-            eta_min=self.min_lr * 20  # 增加最小学习率
+            T_max=self.min_epochs_per_stage['refinement'] * 3,  # Increased period length
+            eta_min=self.min_lr * 20  # Increased minimum learning rate
         )
         
     def step(self, accuracy=None):
-        """更新学习率，基于当前性能动态调整阶段"""
-        # 更新当前轮次
+        """Update learning rate, dynamically adjust stage based on current performance"""
+        # Update current epoch
         self.current_epoch += 1
         self.current_stage_epochs += 1
         
-        # 记录准确率历史
+        # Record accuracy history
         if accuracy is not None:
             self.accuracy_history.append(accuracy)
             
-            # 更新最佳准确率和停滞计数器
-            if accuracy > self.best_accuracy + 0.0005:  # 添加小容差
+            # Update best accuracy and stagnation counter
+            if accuracy > self.best_accuracy + 0.0005:  # Added small tolerance
                 self.best_accuracy = accuracy
                 self.plateau_counter = 0
             else:
                 self.plateau_counter += 1
                 
-        # 如果在阶段过渡中，处理平滑过渡
+        # If in stage transition, handle smooth transition
         if self.in_transition:
             result = self._handle_transition()
-            if result:  # 如果过渡完成
+            if result:  # If transition completed
                 self.in_transition = False
                 self.current_stage = self.transition_to
                 self.transition_to = None
@@ -1169,11 +1169,11 @@ class MultiStageScheduler:
                 self.transition_step = 0
                 self.current_stage_epochs = 0
                 self.plateau_counter = 0
-        # 检查是否应该开始新的阶段过渡
+        # Check if should start new stage transition
         elif self._should_switch_stage():
             next_stage = self._get_next_stage()
             if next_stage != self.current_stage:
-                # 记录当前阶段结束轮次，用于可视化
+                # Record current stage end epoch for visualization
                 if self.current_stage == 'warmup':
                     self.stage_boundaries['warmup_end'] = self.current_epoch
                 elif self.current_stage == 'aggressive':
@@ -1181,63 +1181,63 @@ class MultiStageScheduler:
                 elif self.current_stage == 'refinement':
                     self.stage_boundaries['refinement_end'] = self.current_epoch
                 
-                # 启动阶段过渡
+                # Start stage transition
                 self.in_transition = True
                 self.transition_from = self.current_stage
                 self.transition_to = next_stage
                 self.transition_step = 0
         
-        # 根据当前阶段更新学习率
+        # Update learning rate based on current stage
         if not self.in_transition:
             if self.current_stage in ['warmup', 'aggressive', 'refinement']:
-                # 使用预定义的调度器
+                # Use predefined scheduler
                 self.schedulers[self.current_stage].step()
             else:
-                # 微调阶段：基于验证准确率自适应调整学习率
+                # Fine-tuning stage: adaptively adjust learning rate based on validation accuracy
                 self._adaptive_step(accuracy)
         
-        # 应用学习率保护机制
+        # Apply learning rate protection mechanism
         self._apply_lr_protection()
         
-        # 记录当前学习率
+        # Record current learning rate
         current_lr = self.get_last_lr()
         self.lr_history.append(current_lr[0])
         
         return current_lr
     
     def _handle_transition(self):
-        """处理阶段之间的平滑过渡"""
+        """Handle smooth transition between stages"""
         self.transition_step += 1
         
-        # 获取源阶段和目标阶段的学习率
+        # Get learning rates of source and target stages
         if self.transition_from in ['warmup', 'aggressive', 'refinement']:
             from_lr = self.schedulers[self.transition_from].get_last_lr()[0]
         else:
             from_lr = self.get_last_lr()[0]
             
-        # 计算目标学习率
+        # Calculate target learning rate
         if self.transition_to == 'aggressive':
-            # 积极阶段的起始学习率应该与上一阶段结束时接近
-            to_lr = from_lr * 1.1  # 轻微增加以开始探索
+            # Aggressive stage starting learning rate should be close to end of previous stage
+            to_lr = from_lr * 1.1  # Slight increase to start exploration
         elif self.transition_to == 'refinement':
-            # 细化阶段应该从当前学习率开始
+            # Refinement stage should start from current learning rate
             to_lr = from_lr
         elif self.transition_to == 'fine_tuning':
-            # 微调阶段应该使用较低但不至于太低的学习率
+            # Fine-tuning stage should use lower but not too low learning rate
             to_lr = max(from_lr * 0.7, self.min_lr * 30)
         else:
             to_lr = from_lr
             
-        # 使用余弦过渡计算当前学习率
+        # Calculate current learning rate using cosine transition
         progress = self.transition_step / self.transition_steps
         transition_factor = 0.5 * (1 + math.cos(math.pi * (1 - progress)))
         current_lr = to_lr + (from_lr - to_lr) * transition_factor
         
-        # 应用过渡学习率
+        # Apply transition learning rate
         for group in self.optimizer.param_groups:
             group['lr'] = current_lr
             
-        # 如果过渡完成，初始化下一阶段
+        # If transition completed, initialize next stage
         if self.transition_step >= self.transition_steps:
             self._initialize_next_stage(self.transition_to, current_lr)
             return True
@@ -1245,69 +1245,69 @@ class MultiStageScheduler:
         return False
             
     def _initialize_next_stage(self, new_stage, current_lr):
-        """初始化新阶段的调度器"""
+        """Initialize scheduler for new stage"""
         self.last_stage_lr = current_lr
         
-        # 根据新阶段重新初始化调度器
+        # Reinitialize scheduler based on new stage
         if new_stage == 'aggressive':
             self.schedulers['aggressive'] = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer,
-                max_lr=current_lr * 1.5,  # 相对当前学习率的最大值
+                max_lr=current_lr * 1.5,  # Maximum relative to current learning rate
                 total_steps=self.min_epochs_per_stage['aggressive'] * 2,
                 pct_start=0.4,
                 anneal_strategy='cos',
-                div_factor=3.0,  # 减小波动
+                div_factor=3.0,  # Reduce fluctuations
                 final_div_factor=3.0
             )
         elif new_stage == 'refinement':
             self.schedulers['refinement'] = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=self.min_epochs_per_stage['refinement'] * 3,
-                eta_min=max(self.min_lr * 20, current_lr * 0.2)  # 确保最小值不会太低
+                eta_min=max(self.min_lr * 20, current_lr * 0.2)  # Ensure minimum is not too low
             )
     
     def _should_switch_stage(self):
-        """检查是否应该切换到下一个阶段"""
-        # 没有足够的准确率历史数据
-        if len(self.accuracy_history) < 5:  # 增加到至少5个样本
+        """Check if should switch to next stage"""
+        # Not enough accuracy history data
+        if len(self.accuracy_history) < 5:  # Increased to at least 5 samples
             return False
             
-        # 检查是否满足最小轮次要求
+        # Check if minimum epochs requirement is met
         if self.current_stage_epochs < self.min_epochs_per_stage[self.current_stage]:
             return False
             
-        # 根据当前阶段设置不同的切换策略
+        # Set different switching strategies based on current stage
         if self.current_stage == 'warmup':
-            # 预热阶段：最近5轮的平均准确率提升小于阈值时切换
+            # Warmup stage: switch when average accuracy improvement in recent 5 epochs is below threshold
             if len(self.accuracy_history) < 7:
                 return False
                 
             recent_improvements = [self.accuracy_history[i] - self.accuracy_history[i-1] 
                                  for i in range(len(self.accuracy_history)-5, len(self.accuracy_history))]
             avg_improvement = sum(recent_improvements) / len(recent_improvements)
-            return avg_improvement < 0.01 and avg_improvement > 0  # 增长放缓但仍为正
+            return avg_improvement < 0.01 and avg_improvement > 0  # Growth slowed but still positive
             
         elif self.current_stage == 'aggressive':
-            # 积极探索阶段：准确率趋于稳定或达到较高水平时切换
+            # Aggressive exploration stage: switch when accuracy stabilizes or reaches high level
             recent_improvements = [self.accuracy_history[i] - self.accuracy_history[i-1] 
                                  for i in range(len(self.accuracy_history)-4, len(self.accuracy_history))]
             avg_improvement = sum(recent_improvements) / len(recent_improvements)
             
-            # 当准确率增长放缓或者已经达到较高水平时切换
-            high_accuracy_threshold = 0.85  # 高准确率阈值
+            # Switch when accuracy growth slows or has reached high level
+            high_accuracy_threshold = 0.85  # High accuracy threshold
             return (avg_improvement < self.improvement_threshold or 
                    (self.accuracy_history[-1] > high_accuracy_threshold and self.current_stage_epochs > self.min_epochs_per_stage['aggressive'] * 1.5))
             
         elif self.current_stage == 'refinement':
-            # 细化阶段：出现较长时间停滞或接近最大轮次时切换
-            max_epochs_factor = 1.5  # 最大轮次因子
+            # Refinement stage: switch when long stagnation occurs or approaching max epochs
+            max_epochs_factor = 1.5  # Maximum epochs factor
             approaching_max_epochs = self.current_stage_epochs > self.min_epochs_per_stage['refinement'] * max_epochs_factor
             return self.plateau_counter >= self.stagnation_threshold or approaching_max_epochs
             
         return False
     
     def _get_next_stage(self):
-        """获取下一个阶段"""
+        """Get next stage"""
         if self.current_stage == 'warmup':
             return 'aggressive'
         elif self.current_stage == 'aggressive':
@@ -1317,84 +1317,84 @@ class MultiStageScheduler:
         return 'fine_tuning'
     
     def _transition_to_stage(self, new_stage):
-        """处理阶段切换时的学习率过渡"""
-        # 此方法已被_handle_transition和_initialize_next_stage替代
+        """Handle learning rate transition during stage switching"""
+        # This method has been replaced by _handle_transition and _initialize_next_stage
         pass
     
     def _adaptive_step(self, accuracy):
-        """微调阶段的自适应学习率调整"""
+        """Adaptive learning rate adjustment for fine-tuning stage"""
         if accuracy is None:
             return
         
-        # 跟踪准确率历史以检测趋势
+        # Track accuracy history to detect trends
         window_size = min(5, len(self.accuracy_history))
         if window_size < 3:
             return
             
         recent_accuracies = self.accuracy_history[-window_size:]
         
-        # 计算趋势 - 线性回归斜率
+        # Calculate trend - linear regression slope
         x = list(range(window_size))
         slope = sum((x[i] - sum(x)/window_size) * (recent_accuracies[i] - sum(recent_accuracies)/window_size) 
                   for i in range(window_size)) / sum((x[i] - sum(x)/window_size)**2 for i in range(window_size))
         
         current_lr = self.get_last_lr()[0]
         
-        # 根据趋势调整学习率
-        if slope < -0.001:  # 明显下降趋势
-            # 提高学习率以跳出局部最小值
+        # Adjust learning rate based on trend
+        if slope < -0.001:  # Clear downward trend
+            # Increase learning rate to escape local minimum
             new_lr = min(current_lr * 2.0, self.init_lr * 0.1)
             for group in self.optimizer.param_groups:
                 group['lr'] = new_lr
             self.plateau_counter = 0
             
-        elif abs(slope) < 0.0005:  # 平稳期
-            if self.plateau_counter >= 3:  # 持续平稳
-                # 温和降低学习率
+        elif abs(slope) < 0.0005:  # Plateau period
+            if self.plateau_counter >= 3:  # Sustained plateau
+                # Gently decrease learning rate
                 new_lr = max(current_lr * 0.8, self.min_lr)
                 for group in self.optimizer.param_groups:
                     group['lr'] = new_lr
                 self.plateau_counter = 0
             
-        else:  # 上升趋势，保持当前学习率
+        else:  # Upward trend, maintain current learning rate
             pass
     
     def _apply_lr_protection(self):
-        """应用学习率保护机制，防止学习率突然下降或过低"""
+        """Apply learning rate protection mechanism to prevent sudden drops or excessively low learning rates"""
         if not self.lr_history:
             return
             
         previous_lr = self.lr_history[-1] if len(self.lr_history) > 0 else self.init_lr
         current_lr = self.get_last_lr()[0]
         
-        # 防止单次下降过多
+        # Prevent excessive single-step decrease
         if current_lr < previous_lr * self.lr_protection['max_decrease_factor']:
             protected_lr = previous_lr * self.lr_protection['max_decrease_factor']
             for group in self.optimizer.param_groups:
                 group['lr'] = protected_lr
                 
-        # 确保学习率不会低于最小保护值
+        # Ensure learning rate doesn't fall below minimum protection value
         min_protected_lr = self.init_lr * self.lr_protection['min_lr_factor']
         if current_lr < min_protected_lr and self.current_stage != 'fine_tuning':
             for group in self.optimizer.param_groups:
                 group['lr'] = min_protected_lr
                 
-        # 如果性能提升，给予学习率恢复机会
+        # If performance improves, give learning rate recovery opportunity
         if len(self.accuracy_history) >= 2 and self.accuracy_history[-1] > self.accuracy_history[-2] + 0.005:
-            current_lr = self.get_last_lr()[0]  # 获取可能已被保护的当前学习率
+            current_lr = self.get_last_lr()[0]  # Get current learning rate that may have been protected
             if current_lr < previous_lr and self.current_stage == 'fine_tuning':
                 recovery_lr = min(current_lr * self.lr_protection['recovery_factor'], previous_lr)
                 for group in self.optimizer.param_groups:
                     group['lr'] = recovery_lr
     
     def get_last_lr(self):
-        """获取当前学习率"""
+        """Get current learning rate"""
         return [group['lr'] for group in self.optimizer.param_groups]
     
     def get_stage_info(self):
-        """获取当前阶段信息，用于日志记录"""
+        """Get current stage information for logging"""
         stage = self.transition_to if self.in_transition else self.current_stage
-        stage_display = f"{self.transition_from}->{stage} (过渡中 {self.transition_step}/{self.transition_steps})" if self.in_transition else stage
+        stage_display = f"{self.transition_from}->{stage} (Transition {self.transition_step}/{self.transition_steps})" if self.in_transition else stage
         
         return {
             'stage': stage_display,
@@ -1407,13 +1407,13 @@ class MultiStageScheduler:
         }
 
 def main():
-    # 解析命令行参数
+    # Parse command line arguments
     args = parse_args()
     
-    # 设置matplotlib，检查是否支持中文
+    # Set up matplotlib, check if Chinese is supported
     use_chinese = setup_matplotlib()
     
-    # 初始化配置参数
+    # Initialize configuration parameters
     config = {
         'data_dir': args.data_dir,
         'num_epochs': args.num_epochs,
@@ -1432,63 +1432,63 @@ def main():
         'accuracy_threshold': args.accuracy_threshold,
         'max_per_class': args.max_per_class,
         'max_total': args.max_total,
-        'use_chinese': use_chinese,  # 添加中文支持标志
-        'eval_frequency': 20,  # 每20个epoch评估一次
-        'model_type': args.model_type,  # 模型类型
-        'use_attention': not args.no_attention,  # 是否使用注意力机制
-        'scheduler_type': args.scheduler_type,  # 学习率调度器类型
-        'cosine_T_max': args.cosine_T_max if args.cosine_T_max else args.num_epochs,  # 余弦调度器的T_max参数
-        'cosine_eta_min': args.cosine_eta_min,  # 余弦调度器的最小学习率
-        'cosine_warmup_epochs': args.cosine_warmup_epochs,  # 余弦调度器的预热轮次
-        # 优化版ResNet50专用参数
-        'mining_ratio': args.mining_ratio,  # 困难样本挖掘比例
-        'triangular_margin': args.triangular_margin,  # 三角损失边界
-        'gradient_clip': args.gradient_clip  # 梯度裁剪阈值
+        'use_chinese': use_chinese,  # Add Chinese support flag
+        'eval_frequency': 20,  # Evaluate every 20 epochs
+        'model_type': args.model_type,  # Model type
+        'use_attention': not args.no_attention,  # Whether to use attention mechanism
+        'scheduler_type': args.scheduler_type,  # Learning rate scheduler type
+        'cosine_T_max': args.cosine_T_max if args.cosine_T_max else args.num_epochs,  # T_max parameter for cosine scheduler
+        'cosine_eta_min': args.cosine_eta_min,  # Minimum learning rate for cosine scheduler
+        'cosine_warmup_epochs': args.cosine_warmup_epochs,  # Warmup epochs for cosine scheduler
+        # Optimized ResNet50 specific parameters
+        'mining_ratio': args.mining_ratio,  # Hard example mining ratio
+        'triangular_margin': args.triangular_margin,  # Triangular loss margin
+        'gradient_clip': args.gradient_clip  # Gradient clipping threshold
     }
     
-    # 如果使用优化版ResNet50，自动调整部分参数
+    # If using optimized ResNet50, automatically adjust some parameters
     if config['model_type'] == 'resnet50_optimized':
-        print("检测到优化版ResNet50，自动应用优化配置...")
+        print("Detected optimized ResNet50, automatically applying optimized configuration...")
         
-        # 如果batch_size较大，自动减小以适应更复杂的模型
+        # If batch_size is large, automatically reduce to accommodate more complex model
         if config['batch_size'] > 16:
             original_batch_size = config['batch_size']
             config['batch_size'] = max(8, config['batch_size'] // 2)
-            print(f"自动调整batch_size: {original_batch_size} -> {config['batch_size']}")
+            print(f"Automatically adjusted batch_size: {original_batch_size} -> {config['batch_size']}")
         
-        # 如果学习率较高，自动降低
+        # If learning rate is high, automatically reduce
         if config['learning_rate'] > 5e-5:
             original_lr = config['learning_rate']
             config['learning_rate'] = config['learning_rate'] * 0.8
-            print(f"自动调整学习率: {original_lr} -> {config['learning_rate']}")
+            print(f"Automatically adjusted learning rate: {original_lr} -> {config['learning_rate']}")
         
-        # 增加权重衰减
+        # Increase weight decay
         original_weight_decay = config['weight_decay']
         config['weight_decay'] = config['weight_decay'] * 1.2
-        print(f"自动调整权重衰减: {original_weight_decay} -> {config['weight_decay']}")
+        print(f"Automatically adjusted weight decay: {original_weight_decay} -> {config['weight_decay']}")
         
-        # 增加耐心值
+        # Increase patience value
         config['patience'] = config['patience'] + 5
-        print(f"增加early stopping耐心值到: {config['patience']}")
+        print(f"Increased early stopping patience to: {config['patience']}")
         
-        # 确保梯度累积步数至少为2
+        # Ensure gradient accumulation steps is at least 2
         if config['accumulation_steps'] < 2:
             config['accumulation_steps'] = 2
-            print(f"设置梯度累积步数为: {config['accumulation_steps']}")
+            print(f"Set gradient accumulation steps to: {config['accumulation_steps']}")
     
-    # 如果提供了配置文件，从中加载参数
+    # If configuration file is provided, load parameters from it
     if args.config and os.path.exists(args.config):
         try:
-            print(f"正在从配置文件加载参数: {args.config}")
+            print(f"Loading parameters from configuration file: {args.config}")
             with open(args.config, 'r', encoding='utf-8') as f:
                 file_config = json.load(f)
-                # 更新配置参数
+                # Update configuration parameters
                 config.update(file_config)
-                print(f"已成功加载配置文件")
+                print(f"Successfully loaded configuration file")
         except Exception as e:
-            print(f"加载配置文件时出错: {str(e)}")
+            print(f"Error loading configuration file: {str(e)}")
     
-    # 创建保存目录
+    # Create save directories
     model_name = config['model_type']
     if not config['use_attention'] and model_name != 'ensemble':
         model_name += '_no_attention'
@@ -1501,37 +1501,37 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(visualization_dir, exist_ok=True)
     
-    # 设置设备
+    # Set device
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
-    # 如果指定了特定GPU，使用指定的GPU
+    # If specific GPU is specified, use the specified GPU
     if 'cuda_device' in config and torch.cuda.is_available():
         device = torch.device(f"cuda:{config['cuda_device']}")
     
-    # 优化CUDA设置
+    # Optimize CUDA settings
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.cuda.empty_cache()
     
-    # 设置随机种子
+    # Set random seed
     torch.manual_seed(42)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(42)
     
-    # 设置日志
+    # Set up logging
     logger = setup_logger(log_dir)
     logger.info(f'Using device: {device}')
-    logger.info('配置参数:')
+    logger.info('Configuration parameters:')
     for k, v in config.items():
         logger.info(f'{k}: {v}')
     
     try:
-        # 加载数据和类别映射
+        # Load data and class mapping
         with open(os.path.join(config['data_dir'], 'class_mapping.json'), 'r', encoding='utf-8') as f:
             class_mapping = json.load(f)
             num_classes = len(class_mapping)
-            # 创建反向映射（id到名称）
+            # Create reverse mapping (id to name)
             id_to_name = {v: k for k, v in class_mapping.items()}
         
         train_loader, val_loader = create_data_loaders(
@@ -1540,14 +1540,14 @@ def main():
             num_workers=config.get('num_workers', min(8, os.cpu_count()))
         )
         
-        # 创建模型并应用配置参数
+        # Create model and apply configuration parameters
         if config['model_type'] == 'ensemble':
             model = EnsembleModel(
                 num_classes=num_classes,
                 temperature=config.get('temperature', 2.0)
             ).to(device)
         else:
-            # 使用我们新创建的模型函数
+            # Use our newly created model functions
             if config['use_attention']:
                 model = create_model(
                     config['model_type'],
@@ -1559,30 +1559,30 @@ def main():
                     num_classes=num_classes
                 ).to(device)
         
-        # 输出选择的模型信息
-        logger.info(f"使用模型: {config['model_type']}, 注意力机制: {config['use_attention']}")
-        print(f"使用模型: {config['model_type']}, 注意力机制: {config['use_attention']}")
+        # Output selected model information
+        logger.info(f"Using model: {config['model_type']}, Attention mechanism: {config['use_attention']}")
+        print(f"Using model: {config['model_type']}, Attention mechanism: {config['use_attention']}")
         
-        # 如果配置了模型参数，应用这些参数
+        # If model parameters are configured, apply them
         if 'dropout_rate' in config:
-            # 更新Dropout率
+            # Update Dropout rate
             for module in model.modules():
                 if isinstance(module, torch.nn.Dropout):
                     module.p = config['dropout_rate']
         
         if 'inception_freeze_layers' in config:
-            # 更新Inception模型冻结层数
+            # Update Inception model frozen layer count
             freeze_layers = int(config['inception_freeze_layers'])
             for param in list(model.inception.inception.parameters())[:-freeze_layers]:
                 param.requires_grad = False
         
         if 'fpn_channels' in config:
-            # 更新FPN通道数
+            # Update FPN channel count
             fpn_channels = int(config['fpn_channels'])
             model.inception.fpn.out_channels = fpn_channels
             model.efficientnet.fpn.out_channels = fpn_channels
         
-        # 更新损失函数参数
+        # Update loss function parameters
         if hasattr(model, 'combined_loss') and hasattr(model.combined_loss, 'focal_loss'):
             if 'focal_gamma' in config:
                 model.combined_loss.focal_loss.gamma = config['focal_gamma']
@@ -1592,7 +1592,7 @@ def main():
         if hasattr(model, 'kd_loss') and 'temperature' in config:
             model.kd_loss.temperature = config['temperature']
         
-        # 如果只进行评估
+        # If only performing evaluation
         if args.eval_only:
             if args.checkpoint:
                 checkpoint_path = args.checkpoint
@@ -1600,22 +1600,22 @@ def main():
                 checkpoint_path = os.path.join(save_dir, 'best_model.pth')
                 
             if os.path.exists(checkpoint_path):
-                print(f"\n加载检查点: {checkpoint_path}")
+                print(f"\nLoading checkpoint: {checkpoint_path}")
                 checkpoint = torch.load(checkpoint_path, weights_only=False)
-                # 使用strict=False允许加载部分权重，忽略不匹配的键
+                # Use strict=False to allow loading partial weights, ignore mismatched keys
                 model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-                print("模型加载成功，部分层可能未加载（模型结构可能已更新）")
+                print("Model loaded successfully, some layers may not be loaded (model structure may have been updated)")
                 
-                # 进行评估
+                # Perform evaluation
                 final_results = validate(model, val_loader, device)
                 
-                # 输出评估结果
-                print("\n评估结果:")
-                print(f"准确率: {final_results['accuracy']*100:.2f}%")
-                print(f"宏平均F1: {final_results['macro_f1']:.4f}")
-                print(f"加权平均F1: {final_results['weighted_f1']:.4f}")
+                # Output evaluation results
+                print("\nEvaluation results:")
+                print(f"Accuracy: {final_results['accuracy']*100:.2f}%")
+                print(f"Macro F1: {final_results['macro_f1']:.4f}")
+                print(f"Weighted F1: {final_results['weighted_f1']:.4f}")
                 
-                # 生成混淆矩阵
+                # Generate confusion matrix
                 visualize_confusion_matrix(
                     final_results['confusion_matrix'],
                     list(class_mapping.keys()),
@@ -1624,7 +1624,7 @@ def main():
                     use_chinese=config['use_chinese']
                 )
                 
-                # 生成性能报告
+                # Generate performance report
                 final_report_file = analyze_performance(
                     final_results,
                     class_mapping,
@@ -1632,10 +1632,10 @@ def main():
                     save_dir=visualization_dir,
                     use_chinese=config['use_chinese']
                 )
-                print(f"性能报告已保存到: {final_report_file}")
+                print(f"Performance report saved to: {final_report_file}")
                 
-                # 生成热力图
-                print("\n开始生成低准确率类别的热力图...")
+                # Generate heatmaps
+                print("\nStarting to generate heatmaps for low accuracy classes...")
                 generate_low_accuracy_class_heatmaps(
                     model, 
                     val_loader, 
@@ -1647,8 +1647,8 @@ def main():
                     save_dir=visualization_dir
                 )
                 
-                # 分析混淆矩阵，找出最容易混淆的类别对
-                print("\n开始分析混淆矩阵，找出最容易混淆的类别对...")
+                # Analyze confusion matrix to find most confused class pairs
+                print("\nStarting to analyze confusion matrix to find most confused class pairs...")
                 confusion_pairs_file = analyze_confusion_pairs(
                     final_results['confusion_matrix'],
                     class_mapping,
@@ -1656,14 +1656,14 @@ def main():
                     save_dir=visualization_dir,
                     use_chinese=config['use_chinese']
                 )
-                print(f"混淆矩阵分析已保存到: {confusion_pairs_file}")
+                print(f"Confusion matrix analysis saved to: {confusion_pairs_file}")
                 
                 return
             else:
-                print(f"错误: 检查点文件不存在: {checkpoint_path}")
+                print(f"Error: Checkpoint file does not exist: {checkpoint_path}")
                 return
         
-        # 优化器 - 使用配置参数
+        # Optimizer - use configuration parameters
         optimizer = optim.AdamW(
             model.parameters(),
             lr=config['learning_rate'],
@@ -1672,21 +1672,21 @@ def main():
             eps=config.get('eps', 1e-8)
         )
         
-        # 学习率调度器选择
+        # Learning rate scheduler selection
         if config['scheduler_type'] == 'multistage':
-            # 使用多阶段学习率调度器
+            # Use multi-stage learning rate scheduler
             scheduler = MultiStageScheduler(
                 optimizer,
                 config['num_epochs'],
                 config['learning_rate'],
                 config.get('min_lr', 1e-6)
             )
-            logger.info(f"使用多阶段学习率调度器")
-            print(f"使用多阶段学习率调度器")
+            logger.info(f"Using multi-stage learning rate scheduler")
+            print(f"Using multi-stage learning rate scheduler")
         else:
-            # 使用单一余弦学习率调度器，带预热
+            # Use single cosine learning rate scheduler with warmup
             if config['cosine_warmup_epochs'] > 0:
-                # 线性预热 + 余弦退火
+                # Linear warmup + cosine annealing
                 warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
                     optimizer, 
                     start_factor=0.1, 
@@ -1700,24 +1700,24 @@ def main():
                     eta_min=config['cosine_eta_min']
                 )
                 
-                # 顺序调度器
+                # Sequential scheduler
                 scheduler = torch.optim.lr_scheduler.SequentialLR(
                     optimizer,
                     schedulers=[warmup_scheduler, cosine_scheduler],
                     milestones=[config['cosine_warmup_epochs']]
                 )
             else:
-                # 只使用余弦退火
+                # Use only cosine annealing
                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                     optimizer,
                     T_max=config['cosine_T_max'],
                     eta_min=config['cosine_eta_min']
                 )
             
-            logger.info(f"使用单一余弦学习率调度器，T_max={config['cosine_T_max']}，预热轮次={config['cosine_warmup_epochs']}")
-            print(f"使用单一余弦学习率调度器，T_max={config['cosine_T_max']}，预热轮次={config['cosine_warmup_epochs']}")
+            logger.info(f"Using single cosine learning rate scheduler, T_max={config['cosine_T_max']}, warmup_epochs={config['cosine_warmup_epochs']}")
+            print(f"Using single cosine learning rate scheduler, T_max={config['cosine_T_max']}, warmup_epochs={config['cosine_warmup_epochs']}")
         
-        # 使用混合精度训练
+        # Use mixed precision training
         scaler = GradScaler(
             init_scale=config.get('init_scale', 2**10),
             growth_factor=config.get('growth_factor', 2.0),
@@ -1725,16 +1725,16 @@ def main():
             growth_interval=config.get('growth_interval', 100)
         )
         
-        # 早停机制
+        # Early stopping mechanism
         early_stopping = EarlyStopping(
             patience=config['patience'],
             min_delta=config.get('min_delta', 0.001)
         )
         
-        # 损失监控
+        # Loss monitoring
         loss_monitor = LossMonitor()
         
-        # 训练循环
+        # Training loop
         best_val_acc = 0.0
         train_history = {
             'train_loss': [],
@@ -1750,7 +1750,7 @@ def main():
             'class_recall': {}
         }
         
-        # 存储当前类别准确率的字典
+        # Dictionary to store current class accuracies
         current_class_accuracies = None
         
         for epoch in range(config['num_epochs']):
@@ -1759,21 +1759,21 @@ def main():
             print(f"\n{'='*50}")
             print(f"Epoch [{epoch+1}/{config['num_epochs']}]")
             
-            # 设置数据增强参数（确保相关变换存在）
+            # Set data augmentation parameters (ensure relevant transforms exist)
             try:
-                # 应用MixUp和RandomErasing参数
+                # Apply MixUp and RandomErasing parameters
                 if hasattr(train_loader.dataset, 'transform'):
                     for transform in train_loader.dataset.transform.transforms:
-                        # 更新MixUp alpha
+                        # Update MixUp alpha
                         if hasattr(transform, 'alpha') and 'mixup_alpha' in config:
                             transform.alpha = config['mixup_alpha']
-                        # 更新RandomErasing概率
+                        # Update RandomErasing probability
                         if hasattr(transform, 'p') and hasattr(transform, 'value') and 'random_erasing_prob' in config:
                             transform.p = config['random_erasing_prob']
             except Exception as e:
-                logger.warning(f"设置数据增强参数失败: {str(e)}")
+                logger.warning(f"Failed to set data augmentation parameters: {str(e)}")
             
-            # 训练，传入当前类别准确率
+            # Training, pass current class accuracies
             train_loss, train_acc = train_epoch(
                 model, train_loader, optimizer,
                 scaler, device, epoch, config['num_epochs'],
@@ -1782,13 +1782,13 @@ def main():
                 accumulation_steps=config.get('accumulation_steps', 1)
             )
             
-            # 验证
+            # Validation
             val_results = validate(model, val_loader, device)
             
-            # 更新当前类别准确率
+            # Update current class accuracies
             current_class_accuracies = val_results['class_accuracies']
             
-            # 更新学习率
+            # Update learning rate
             if config['scheduler_type'] == 'multistage':
                 current_lr = scheduler.step(val_results['accuracy'])
                 stage_info = scheduler.get_stage_info()
@@ -1797,7 +1797,7 @@ def main():
                 current_lr = [group['lr'] for group in optimizer.param_groups]
                 stage_info = {'stage': 'cosine', 'epoch_in_stage': epoch, 'plateau_counter': 0}
             
-            # 更新训练历史
+            # Update training history
             train_history['train_loss'].append(train_loss)
             train_history['train_acc'].append(train_acc)
             train_history['val_acc'].append(val_results['accuracy'])
@@ -1806,7 +1806,7 @@ def main():
             train_history['macro_f1'].append(val_results['macro_f1'])
             train_history['weighted_f1'].append(val_results['weighted_f1'])
             
-            # 添加阶段信息到训练历史
+            # Add stage information to training history
             if 'lr_stages' not in train_history:
                 train_history['lr_stages'] = []
             
@@ -1820,53 +1820,53 @@ def main():
             else:
                 train_history['lr_stages'].append('cosine')
             
-            # 更新每个类别的评估指标历史
+            # Update evaluation metrics history for each class
             for class_id, accuracy in val_results['class_accuracies'].items():
                 class_name = id_to_name[class_id]
                 
-                # 更新准确率历史
+                # Update accuracy history
                 if class_name not in train_history['class_acc']:
                     train_history['class_acc'][class_name] = []
                 train_history['class_acc'][class_name].append(accuracy)
                 
-                # 更新F1分数历史
+                # Update F1 score history
                 if class_name not in train_history['class_f1']:
                     train_history['class_f1'][class_name] = []
                 train_history['class_f1'][class_name].append(val_results['class_f1'][class_id])
                 
-                # 更新精确率历史
+                # Update precision history
                 if class_name not in train_history['class_precision']:
                     train_history['class_precision'][class_name] = []
                 train_history['class_precision'][class_name].append(val_results['class_precision'][class_id])
                 
-                # 更新召回率历史
+                # Update recall history
                 if class_name not in train_history['class_recall']:
                     train_history['class_recall'][class_name] = []
                 train_history['class_recall'][class_name].append(val_results['class_recall'][class_id])
             
-            # 输出训练信息
-            print(f"训练准确率: {train_acc*100:.2f}%")
-            print(f"验证准确率: {val_results['accuracy']*100:.2f}%")
-            print(f"训练损失: {train_loss:.4f}")
-            print(f"验证损失: {val_results['loss']:.4f}")
-            print(f"宏平均F1: {val_results['macro_f1']:.4f}")
-            print(f"加权平均F1: {val_results['weighted_f1']:.4f}")
-            print(f"当前学习率: {current_lr[0]:.6f} (阶段: {stage_info['stage']}, 当前阶段第{stage_info['epoch_in_stage']}轮, 停滞计数: {stage_info['plateau_counter']})")
+            # Output training information
+            print(f"Training accuracy: {train_acc*100:.2f}%")
+            print(f"Validation accuracy: {val_results['accuracy']*100:.2f}%")
+            print(f"Training loss: {train_loss:.4f}")
+            print(f"Validation loss: {val_results['loss']:.4f}")
+            print(f"Macro F1: {val_results['macro_f1']:.4f}")
+            print(f"Weighted F1: {val_results['weighted_f1']:.4f}")
+            print(f"Current learning rate: {current_lr[0]:.6f} (Stage: {stage_info['stage']}, Epoch {stage_info['epoch_in_stage']} in stage, Plateau counter: {stage_info['plateau_counter']})")
             print(f"{'='*50}\n")
             
-            # 记录到日志
-            logger.info(f"\n训练统计:")
-            logger.info(f"学习率: {current_lr[0]:.6f} (阶段: {stage_info['stage']}, 当前阶段第{stage_info['epoch_in_stage']}轮)")
-            logger.info(f"训练损失: {train_loss:.4f}")
-            logger.info(f"验证损失: {val_results['loss']:.4f}")
-            logger.info(f"训练准确率: {train_acc*100:.2f}%")
-            logger.info(f"验证准确率: {val_results['accuracy']*100:.2f}%")
-            logger.info(f"宏平均F1: {val_results['macro_f1']:.4f}")
-            logger.info(f"加权平均F1: {val_results['weighted_f1']:.4f}")
+            # Log to logger
+            logger.info(f"\nTraining statistics:")
+            logger.info(f"Learning rate: {current_lr[0]:.6f} (Stage: {stage_info['stage']}, Epoch {stage_info['epoch_in_stage']} in stage)")
+            logger.info(f"Training loss: {train_loss:.4f}")
+            logger.info(f"Validation loss: {val_results['loss']:.4f}")
+            logger.info(f"Training accuracy: {train_acc*100:.2f}%")
+            logger.info(f"Validation accuracy: {val_results['accuracy']*100:.2f}%")
+            logger.info(f"Macro F1: {val_results['macro_f1']:.4f}")
+            logger.info(f"Weighted F1: {val_results['weighted_f1']:.4f}")
             
-            # 只在指定频率生成混淆矩阵和性能分析
+            # Only generate confusion matrix and performance analysis at specified frequency
             if epoch % config['eval_frequency'] == 0 or epoch == config['num_epochs'] - 1:
-                # 可视化混淆矩阵
+                # Visualize confusion matrix
                 visualize_confusion_matrix(
                     val_results['confusion_matrix'], 
                     list(class_mapping.keys()), 
@@ -1875,7 +1875,7 @@ def main():
                     use_chinese=config['use_chinese']
                 )
                 
-                # 分析性能
+                # Analyze performance
                 performance_report_file = analyze_performance(
                     val_results, 
                     class_mapping, 
@@ -1883,13 +1883,13 @@ def main():
                     save_dir=visualization_dir,
                     use_chinese=config['use_chinese']
                 )
-                logger.info(f'性能报告已保存到: {performance_report_file}')
+                logger.info(f'Performance report saved to: {performance_report_file}')
             
-            # 保存最佳模型
+            # Save best model
             if val_results['accuracy'] > best_val_acc:
                 best_val_acc = val_results['accuracy']
                                 
-                # 保存模型
+                # Save model
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
@@ -1903,80 +1903,80 @@ def main():
                     'confusion_matrix': val_results['confusion_matrix'],
                     'train_history': train_history
                 }, os.path.join(save_dir, 'best_model.pth'))
-                logger.info("最佳模型已保存")
+                logger.info("Best model saved")
             
-            # 检查早停
+            # Check early stopping
             early_stopping(train_loss, val_results['accuracy'], epoch)
             if early_stopping.early_stop:
-                print(f"\n[早停] 触发早停机制，停止训练")
-                print(f"最佳验证准确率: {best_val_acc*100:.2f}% (第 {early_stopping.best_epoch + 1} 轮)")
-                print(f"当前轮次: {epoch + 1}")
-                print(f"已经 {config['patience']} 轮未提升，停止训练")
-                logger.info('\n触发早停机制，停止训练')
-                logger.info(f"最佳验证准确率: {best_val_acc*100:.2f}% (第 {early_stopping.best_epoch + 1} 轮)")
+                print(f"\n[Early Stopping] Early stopping triggered, stopping training")
+                print(f"Best validation accuracy: {best_val_acc*100:.2f}% (Epoch {early_stopping.best_epoch + 1})")
+                print(f"Current epoch: {epoch + 1}")
+                print(f"No improvement for {config['patience']} epochs, stopping training")
+                logger.info('\nEarly stopping triggered, stopping training')
+                logger.info(f"Best validation accuracy: {best_val_acc*100:.2f}% (Epoch {early_stopping.best_epoch + 1})")
                 break
         
-        print(f"\n训练完成! 最佳验证准确率: {best_val_acc*100:.2f}%")
+        print(f"\nTraining completed! Best validation accuracy: {best_val_acc*100:.2f}%")
         
-        # 保存训练历史
+        # Save training history
         history_file = os.path.join(log_dir, 'ensemble_training_history.json')
         with open(history_file, 'w', encoding='utf-8') as f:
             json.dump(train_history, f, ensure_ascii=False, indent=4)
-        logger.info(f'训练历史已保存到: {history_file}')
+        logger.info(f'Training history saved to: {history_file}')
         
-        # 绘制学习曲线
+        # Plot learning curves
         plot_learning_curves(
             train_history, 
             save_dir=visualization_dir,
             use_chinese=config['use_chinese']
         )
-        logger.info('学习曲线已生成')
+        logger.info('Learning curves generated')
         
-        # 加载最佳模型进行最终评估
-        print("\n加载最佳模型进行最终评估...")
+        # Load best model for final evaluation
+        print("\nLoading best model for final evaluation...")
         best_model_path = os.path.join(save_dir, 'best_model.pth')
         if os.path.exists(best_model_path):
             checkpoint = torch.load(best_model_path, weights_only=False)
-            # 使用strict=False允许加载部分权重，忽略不匹配的键
+            # Use strict=False to allow loading partial weights, ignore mismatched keys
             model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-            print("模型加载成功，部分层可能未加载（模型结构可能已更新）")
+            print("Model loaded successfully, some layers may not be loaded (model structure may have been updated)")
             
-            # 进行最终评估
+            # Perform final evaluation
             final_results = validate(model, val_loader, device)
             
-            # 生成最终混淆矩阵
+            # Generate final confusion matrix
             visualize_confusion_matrix(
                 final_results['confusion_matrix'],
                 list(class_mapping.keys()),
-                epoch=999,  # 使用特殊值表示最终结果
+                epoch=999,  # Use special value to represent final results
                 save_dir=visualization_dir,
                 use_chinese=config['use_chinese']
             )
             
-            # 生成最终性能报告
+            # Generate final performance report
             final_report_file = analyze_performance(
                 final_results,
                 class_mapping,
-                epoch=999,  # 使用特殊值表示最终结果
+                epoch=999,  # Use special value to represent final results
                 save_dir=visualization_dir,
                 use_chinese=config['use_chinese']
             )
             
-            # 输出最终结果
-            print("\n最终评估结果:")
-            print(f"准确率: {final_results['accuracy']*100:.2f}%")
-            print(f"宏平均F1: {final_results['macro_f1']:.4f}")
-            print(f"加权平均F1: {final_results['weighted_f1']:.4f}")
-            print(f"最终性能报告已保存到: {final_report_file}")
+            # Output final results
+            print("\nFinal evaluation results:")
+            print(f"Accuracy: {final_results['accuracy']*100:.2f}%")
+            print(f"Macro F1: {final_results['macro_f1']:.4f}")
+            print(f"Weighted F1: {final_results['weighted_f1']:.4f}")
+            print(f"Final performance report saved to: {final_report_file}")
             
-            # 记录到日志
-            logger.info("\n最终评估结果:")
-            logger.info(f"准确率: {final_results['accuracy']*100:.2f}%")
-            logger.info(f"宏平均F1: {final_results['macro_f1']:.4f}")
-            logger.info(f"加权平均F1: {final_results['weighted_f1']:.4f}")
+            # Log to logger
+            logger.info("\nFinal evaluation results:")
+            logger.info(f"Accuracy: {final_results['accuracy']*100:.2f}%")
+            logger.info(f"Macro F1: {final_results['macro_f1']:.4f}")
+            logger.info(f"Weighted F1: {final_results['weighted_f1']:.4f}")
             
-            # 生成低准确率类别的错误预测图像的热力图
-            print("\n开始生成低准确率类别的热力图...")
+            # Generate heatmaps for incorrectly predicted images of low accuracy classes
+            print("\nStarting to generate heatmaps for low accuracy classes...")
             generate_low_accuracy_class_heatmaps(
                 model, 
                 val_loader, 
@@ -1987,10 +1987,10 @@ def main():
                 max_total=config['max_total'],
                 save_dir=visualization_dir
             )
-            print("热力图生成完成！")
+            print("Heatmap generation completed!")
             
-            # 分析混淆矩阵，找出最容易混淆的类别对
-            print("\n开始分析混淆矩阵，找出最容易混淆的类别对...")
+            # Analyze confusion matrix to find most confused class pairs
+            print("\nStarting to analyze confusion matrix to find most confused class pairs...")
             confusion_pairs_file = analyze_confusion_pairs(
                 final_results['confusion_matrix'],
                 class_mapping,
@@ -1998,12 +1998,12 @@ def main():
                 save_dir=visualization_dir,
                 use_chinese=config['use_chinese']
             )
-            logger.info(f'混淆矩阵分析已保存到: {confusion_pairs_file}')
+            logger.info(f'Confusion matrix analysis saved to: {confusion_pairs_file}')
         else:
-            logger.warning(f"未找到最佳模型文件: {best_model_path}")
+            logger.warning(f"Best model file not found: {best_model_path}")
             
     except Exception as e:
-        logger.error(f'训练过程中发生错误: {str(e)}')
+        logger.error(f'Error occurred during training: {str(e)}')
         raise e
 
 if __name__ == "__main__":

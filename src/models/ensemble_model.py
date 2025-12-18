@@ -5,11 +5,11 @@ from torchvision import models
 from .fpn import FPN, FeatureFusion
 from .losses import KnowledgeDistillationLoss, EnhancedCombinedLoss, AdaptiveFocalLoss
 from .contrastive_losses import CombinedAdaptiveContrastiveLoss
-from .grad_cam import GradCAM  # 导入Grad-CAM类
-from .residual_modules import ResidualFeatureFusion  # 🔥 阶段一：引入残差特征融合
+from .grad_cam import GradCAM  # Import Grad-CAM class
+from .residual_modules import ResidualFeatureFusion  # 🔥 Stage 1: Introduce residual feature fusion
 
 class EnhancedInceptionV3(nn.Module):
-    """增强版Inception V3"""
+    """Enhanced Inception V3"""
     def __init__(self, num_classes):
         super(EnhancedInceptionV3, self).__init__()
         self.inception = models.inception_v3(
@@ -17,22 +17,22 @@ class EnhancedInceptionV3(nn.Module):
             aux_logits=True
         )
         
-        # 冻结部分层
+        # Freeze some layers
         for param in list(self.inception.parameters())[:-150]:
             param.requires_grad = False
         
-        # 移除外挂注意力模块 - 根据新的技术方案
+        # Remove external attention modules - according to new technical approach
         
-        # 特征金字塔
+        # Feature pyramid
         self.fpn = FPN(
             in_channels_list=[288, 768, 1280, 2048],
             out_channels=512
         )
         
-        # 特征融合
+        # Feature fusion
         self.fusion = FeatureFusion(channels=512)
         
-        # 分类头
+        # Classification head
         self.fc = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
@@ -48,10 +48,10 @@ class EnhancedInceptionV3(nn.Module):
         )
     
     def _extract_features(self, x):
-        """提取Inception V3的中间特征"""
+        """Extract intermediate features from Inception V3"""
         features = []
         
-        # 第一阶段：Conv2d layers
+        # Stage 1: Conv2d layers
         x = self.inception.Conv2d_1a_3x3(x)  # 32
         x = self.inception.Conv2d_2a_3x3(x)  # 32
         x = self.inception.Conv2d_2b_3x3(x)  # 64
@@ -60,13 +60,13 @@ class EnhancedInceptionV3(nn.Module):
         x = self.inception.Conv2d_4a_3x3(x)  # 192
         x = F.max_pool2d(x, kernel_size=3, stride=2)
         
-        # 第二阶段：Mixed_5 layers (288 channels)
+        # Stage 2: Mixed_5 layers (288 channels)
         x = self.inception.Mixed_5b(x)  # 256
         x = self.inception.Mixed_5c(x)  # 288
         x = self.inception.Mixed_5d(x)  # 288
         features.append(x)  # 288 channels
         
-        # 第三阶段：Mixed_6 layers (768 channels)
+        # Stage 3: Mixed_6 layers (768 channels)
         x = self.inception.Mixed_6a(x)  # 768
         x = self.inception.Mixed_6b(x)  # 768
         x = self.inception.Mixed_6c(x)  # 768
@@ -74,35 +74,35 @@ class EnhancedInceptionV3(nn.Module):
         x = self.inception.Mixed_6e(x)  # 768
         features.append(x)  # 768 channels
         
-        # 保存辅助分类器的输入
+        # Save input for auxiliary classifier
         aux = None
         if self.training and self.inception.aux_logits:
             aux = self.inception.AuxLogits(x)
         
-        # 第四阶段：Mixed_7a (1280 channels)
+        # Stage 4: Mixed_7a (1280 channels)
         x = self.inception.Mixed_7a(x)  # 1280
         features.append(x)  # 1280 channels
         
-        # 第五阶段：Mixed_7b/c (2048 channels)
+        # Stage 5: Mixed_7b/c (2048 channels)
         x = self.inception.Mixed_7b(x)  # 2048
         x = self.inception.Mixed_7c(x)  # 2048
         features.append(x)  # 2048 channels
         
-        # 移除注意力机制，保持原始特征
+        # Remove attention mechanism, preserve original features
         
         return features, aux
     
     def forward(self, x):
-        # 提取特征
+        # Extract features
         features, aux = self._extract_features(x)
         
-        # 特征金字塔增强
+        # Feature pyramid enhancement
         fpn_features = self.fpn(features)
         
-        # 特征融合
+        # Feature fusion
         fused_features = self.fusion(fpn_features[0], fpn_features[-1])
         
-        # 分类
+        # Classification
         x = self.fc(fused_features)
         
         if self.training and aux is not None:
@@ -110,19 +110,19 @@ class EnhancedInceptionV3(nn.Module):
         return x, fused_features
 
 class EfficientNetB4Enhanced(nn.Module):
-    """增强版EfficientNet-B4"""
+    """Enhanced EfficientNet-B4"""
     def __init__(self, num_classes):
         super(EfficientNetB4Enhanced, self).__init__()
         self.efficientnet = models.efficientnet_b4(
             weights=models.EfficientNet_B4_Weights.IMAGENET1K_V1
         )
         
-        # EfficientNet-B4的特征层通道数
+        # EfficientNet-B4 feature layer channel sizes
         self.channel_sizes = [24, 56, 160, 1792]
         
-        # 移除外挂注意力模块，保留EfficientNet原生SE模块
+        # Remove external attention modules, preserve EfficientNet native SE modules
         
-        # 特征预处理层（统一空间维度和通道数）
+        # Feature preprocessing layers (unify spatial dimensions and channel counts)
         self.preprocess = nn.ModuleList([
             nn.Sequential(
                 nn.Conv2d(24, 288, 1),
@@ -150,16 +150,16 @@ class EfficientNetB4Enhanced(nn.Module):
             )
         ])
         
-        # 特征金字塔
+        # Feature pyramid
         self.fpn = FPN(
             in_channels_list=[288, 768, 1280, 2048],
             out_channels=512
         )
         
-        # 特征融合
+        # Feature fusion
         self.fusion = FeatureFusion(channels=512)
         
-        # 分类头
+        # Classification head
         self.fc = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
@@ -174,41 +174,41 @@ class EfficientNetB4Enhanced(nn.Module):
             nn.Linear(512, num_classes)
         )
         
-        # 冻结部分层
+        # Freeze some layers
         for param in list(self.efficientnet.parameters())[:-100]:
             param.requires_grad = False
     
     def _extract_features(self, x):
-        """提取EfficientNet-B4的中间特征"""
+        """Extract intermediate features from EfficientNet-B4"""
         features = []
         current_feature = x
         
-        # 获取特征提取器的所有层
+        # Get all layers from feature extractor
         layers = list(self.efficientnet.features)
         
-        # 第一阶段：24通道
+        # Stage 1: 24 channels
         for layer in layers[:2]:
             current_feature = layer(current_feature)
         features.append(current_feature)
         
-        # 第二阶段：56通道
+        # Stage 2: 56 channels
         for layer in layers[2:4]:
             current_feature = layer(current_feature)
         features.append(current_feature)
         
-        # 第三阶段：160通道
+        # Stage 3: 160 channels
         for layer in layers[4:6]:
             current_feature = layer(current_feature)
         features.append(current_feature)
         
-        # 第四阶段：1792通道
+        # Stage 4: 1792 channels
         for layer in layers[6:]:
             current_feature = layer(current_feature)
         features.append(current_feature)
         
-        # 保留EfficientNet原生特征，不添加外挂注意力
+        # Preserve EfficientNet native features, do not add external attention
         
-        # 预处理特征，使其与Inception V3的特征维度匹配
+        # Preprocess features to match Inception V3 feature dimensions
         processed_features = []
         for feat, preprocess in zip(features, self.preprocess):
             processed_features.append(preprocess(feat))
@@ -216,37 +216,37 @@ class EfficientNetB4Enhanced(nn.Module):
         return processed_features
     
     def forward(self, x):
-        # 确保输入尺寸正确 (EfficientNet-B4需要380x380)
+        # Ensure input size is correct (EfficientNet-B4 requires 380x380)
         if x.shape[-1] != 380:
             x = F.interpolate(x, size=(380, 380), mode='bilinear', align_corners=True)
         
-        # 提取并预处理特征
+        # Extract and preprocess features
         features = self._extract_features(x)
         
-        # 特征金字塔增强
+        # Feature pyramid enhancement
         fpn_features = self.fpn(features)
         
-        # 特征融合
+        # Feature fusion
         fused_features = self.fusion(fpn_features[0], fpn_features[-1])
         
-        # 分类
+        # Classification
         x = self.fc(fused_features)
         
         return x, fused_features
 
 class EnsembleModel(nn.Module):
-    """集成模型"""
+    """Ensemble model"""
     def __init__(self, num_classes, temperature=4.0):
         super(EnsembleModel, self).__init__()
         self.inception = EnhancedInceptionV3(num_classes)
         self.efficientnet = EfficientNetB4Enhanced(num_classes)
         
-        # 使用增强版组合损失函数
+        # Use enhanced combined loss function
         self.combined_loss = EnhancedCombinedLoss(num_classes, feat_dim=512)
         self.kd_loss = KnowledgeDistillationLoss(temperature=temperature)
         self.ce = nn.CrossEntropyLoss()
         
-        # 添加对比学习和领域自适应损失
+        # Add contrastive learning and domain adaptation loss
         self.adaptive_contrastive = CombinedAdaptiveContrastiveLoss(
             feature_dim=512,
             num_classes=num_classes,
@@ -255,55 +255,55 @@ class EnsembleModel(nn.Module):
         )
         
         # Grad-CAM
-        self.grad_cam = None  # Grad-CAM实例将会在forward中创建
+        self.grad_cam = None  # Grad-CAM instance will be created in forward
         
-        # 模型融合权重 - 初始化为相等权重
+        # Model fusion weights - initialized to equal weights
         self.weight_inception = nn.Parameter(torch.FloatTensor([0.5]))
         self.weight_efficientnet = nn.Parameter(torch.FloatTensor([0.5]))
         
-        # 特征对齐层 - 统一到相同尺寸 H×W×C
+        # Feature alignment layers - unify to same size H×W×C
         self.feature_alignment = nn.ModuleDict({
             'inception': nn.Sequential(
-                nn.AdaptiveAvgPool2d((8, 8)),  # 统一空间尺寸到8x8
+                nn.AdaptiveAvgPool2d((8, 8)),  # Unify spatial size to 8x8
                 nn.Conv2d(512, 512, 1),
                 nn.BatchNorm2d(512),
                 nn.ReLU(inplace=True)
             ),
             'efficientnet': nn.Sequential(
-                nn.AdaptiveAvgPool2d((8, 8)),  # 统一空间尺寸到8x8
+                nn.AdaptiveAvgPool2d((8, 8)),  # Unify spatial size to 8x8
                 nn.Conv2d(512, 512, 1),
                 nn.BatchNorm2d(512),
                 nn.ReLU(inplace=True)
             )
         })
         
-        # 分支级门控
+        # Branch-level gating
         self.branch_gating = BranchGating(feature_dim=512)
         
-        # 🔥 阶段一改进：使用残差式特征融合
+        # 🔥 Stage 1 improvement: Use residual feature fusion
         self.feature_fusion = ResidualFeatureFusion(feature_dim=512)
-        # 原版：self.feature_fusion = AdaptiveFeatureFusion(feature_dim=512, fusion_type='weighted')
+        # Original: self.feature_fusion = AdaptiveFeatureFusion(feature_dim=512, fusion_type='weighted')
         
-        # 残差式注意力
+        # Residual attention
         self.residual_attention = ResidualAttentionBlock(feature_dim=512)
         
-        # 添加投影头，用于对比学习
+        # Add projection head for contrastive learning
         self.projection = nn.Sequential(
             nn.Linear(512, 512),
             nn.ReLU(inplace=True),
             nn.Linear(512, 128)
         )
         
-        # 存储类别准确率
+        # Store class accuracies
         self.class_accuracies = None
     
     def forward(self, x, labels=None, alpha=1.0, class_accuracies=None, contrast_weight=0.1):
-        # 更新类别准确率
+        # Update class accuracies
         if class_accuracies is not None:
             self.class_accuracies = class_accuracies
             
         if self.training and labels is not None:
-            # 获取Inception输出
+            # Get Inception output
             inception_outputs = self.inception(x)
             if len(inception_outputs) == 3:
                 inception_logits, inception_features, aux_logits = inception_outputs
@@ -311,23 +311,23 @@ class EnsembleModel(nn.Module):
                 inception_logits, inception_features = inception_outputs
                 aux_logits = None
             
-            # 获取EfficientNet输出
+            # Get EfficientNet output
             efficientnet_logits, efficientnet_features = self.efficientnet(x)
             
-            # 特征对齐到统一尺寸 H×W×C
+            # Align features to unified size H×W×C
             aligned_inception = self.feature_alignment['inception'](inception_features)
             aligned_efficientnet = self.feature_alignment['efficientnet'](efficientnet_features)
             
-            # 分支级门控
+            # Branch-level gating
             gated_features = self.branch_gating(aligned_inception, aligned_efficientnet)
             
-            # 自适应特征融合
+            # Adaptive feature fusion
             fused_features = self.feature_fusion(aligned_inception, aligned_efficientnet)
             
-            # 残差式注意力
+            # Residual attention
             attention_features = self.residual_attention(fused_features)
             
-            # 加权融合
+            # Weighted fusion
             weights = F.softmax(torch.stack([
                 self.weight_inception,
                 self.weight_efficientnet
@@ -338,7 +338,7 @@ class EnsembleModel(nn.Module):
                 weights[1] * efficientnet_logits
             )
             
-            # 计算各个模型的损失，使用对齐后的特征
+            # Calculate losses for each model using aligned features
             inception_loss = self.combined_loss(
                 aligned_inception, 
                 inception_logits, 
@@ -353,64 +353,64 @@ class EnsembleModel(nn.Module):
                 class_accuracies=self.class_accuracies
             )
             
-            # 使用自适应Focal Loss
+            # Use adaptive Focal Loss
             ce_loss = AdaptiveFocalLoss(num_classes=inception_logits.size(1), gamma=1.5, smoothing=0.2)
             if self.class_accuracies is not None:
                 ce_loss.update_weights(self.class_accuracies)
             ensemble_loss = ce_loss(ensemble_logits, labels)
             
-            # 计算知识蒸馏损失
+            # Calculate knowledge distillation loss
             kd_loss = self.kd_loss(efficientnet_logits, inception_logits, labels)
             
-            # 生成对比学习特征，使用注意力增强后的特征
+            # Generate contrastive learning features using attention-enhanced features
             inception_feat = F.adaptive_avg_pool2d(aligned_inception, (1, 1)).squeeze(-1).squeeze(-1)
             efficientnet_feat = F.adaptive_avg_pool2d(aligned_efficientnet, (1, 1)).squeeze(-1).squeeze(-1)
             attention_feat = F.adaptive_avg_pool2d(attention_features, (1, 1)).squeeze(-1).squeeze(-1)
             
-            # 投影特征
+            # Project features
             proj_inception = self.projection(inception_feat)
             proj_efficientnet = self.projection(efficientnet_feat)
             
-            # 计算对比学习和领域自适应损失，使用注意力增强特征
+            # Calculate contrastive learning and domain adaptation loss using attention-enhanced features
             contrast_domain_loss = self.adaptive_contrastive(
-                features=self.projection(attention_feat),  # 使用注意力增强后的特征
+                features=self.projection(attention_feat),  # Use attention-enhanced features
                 labels=labels,
                 domain_features=torch.cat([inception_feat, efficientnet_feat, attention_feat], dim=0),
                 alpha=alpha
             )
             
-            # 总损失，使用动态对比学习权重
+            # Total loss, use dynamic contrastive learning weight
             loss = (inception_loss + 
                    efficientnet_loss + 
                    ensemble_loss + 
                    0.5 * kd_loss + 
-                   contrast_weight * 1.5 * contrast_domain_loss)  # 使用动态对比学习权重
+                   contrast_weight * 1.5 * contrast_domain_loss)  # Use dynamic contrastive learning weight
             
-            # 添加辅助损失
+            # Add auxiliary loss
             if aux_logits is not None:
                 aux_loss = ce_loss(aux_logits, labels)
                 loss = loss + 0.4 * aux_loss
             
             return ensemble_logits, loss
         else:
-            # 推理模式
+            # Inference mode
             inception_logits, inception_features = self.inception(x)
             efficientnet_logits, efficientnet_features = self.efficientnet(x)
             
-            # 特征对齐到统一尺寸 H×W×C
+            # Align features to unified size H×W×C
             aligned_inception = self.feature_alignment['inception'](inception_features)
             aligned_efficientnet = self.feature_alignment['efficientnet'](efficientnet_features)
             
-            # 分支级门控
+            # Branch-level gating
             gated_features = self.branch_gating(aligned_inception, aligned_efficientnet)
             
-            # 自适应特征融合
+            # Adaptive feature fusion
             fused_features = self.feature_fusion(aligned_inception, aligned_efficientnet)
             
-            # 残差式注意力
+            # Residual attention
             attention_features = self.residual_attention(fused_features)
             
-            # 加权融合logits
+            # Weighted fusion of logits
             weights = F.softmax(torch.stack([
                 self.weight_inception,
                 self.weight_efficientnet
@@ -421,27 +421,27 @@ class EnsembleModel(nn.Module):
                 weights[1] * efficientnet_logits
             )
             
-            # 创建 Grad-CAM 实例，使用最后一个卷积层作为目标层
+            # Create Grad-CAM instance, use last convolutional layer as target layer
             self.grad_cam = GradCAM(self, self.inception.inception.Mixed_7c) 
             
-            return ensemble_logits, attention_features  # 返回注意力增强后的特征
+            return ensemble_logits, attention_features  # Return attention-enhanced features
 
 
 class AdaptiveFeatureFusion(nn.Module):
-    """自适应特征融合模块"""
+    """Adaptive feature fusion module"""
     def __init__(self, feature_dim=512, fusion_type='weighted'):
         super(AdaptiveFeatureFusion, self).__init__()
         self.fusion_type = fusion_type
         
         if fusion_type == 'concat':
-            # 拼接后的通道数是原来的2倍
+            # Channel count after concatenation is 2x original
             self.fusion_conv = nn.Sequential(
                 nn.Conv2d(feature_dim * 2, feature_dim, 1),
                 nn.BatchNorm2d(feature_dim),
                 nn.ReLU(inplace=True)
             )
         elif fusion_type == 'weighted':
-            # 逐通道加权
+            # Per-channel weighting
             self.channel_weights = nn.Sequential(
                 nn.AdaptiveAvgPool2d(1),
                 nn.Conv2d(feature_dim * 2, feature_dim, 1),
@@ -459,11 +459,11 @@ class AdaptiveFeatureFusion(nn.Module):
 
 
 class ResidualAttentionBlock(nn.Module):
-    """残差式注意力模块"""
+    """Residual attention module"""
     def __init__(self, feature_dim=512, reduction=16):
         super(ResidualAttentionBlock, self).__init__()
         
-        # 通道注意力：全局平均池化 → MLP → Sigmoid
+        # Channel attention: global average pooling → MLP → Sigmoid
         self.channel_attention = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(feature_dim, feature_dim // reduction, 1),
@@ -472,7 +472,7 @@ class ResidualAttentionBlock(nn.Module):
             nn.Sigmoid()
         )
         
-        # 轻量空间注意力：depthwise 3x3 conv + Sigmoid
+        # Lightweight spatial attention: depthwise 3x3 conv + Sigmoid
         self.spatial_attention = nn.Sequential(
             nn.Conv2d(feature_dim, feature_dim, 3, padding=1, groups=feature_dim),
             nn.BatchNorm2d(feature_dim),
@@ -481,38 +481,38 @@ class ResidualAttentionBlock(nn.Module):
             nn.Sigmoid()
         )
         
-        # 残差连接权重
-        self.alpha = nn.Parameter(torch.tensor(0.3))  # 通道注意力权重
-        self.beta = nn.Parameter(torch.tensor(0.3))   # 空间注意力权重
+        # Residual connection weights
+        self.alpha = nn.Parameter(torch.tensor(0.3))  # Channel attention weight
+        self.beta = nn.Parameter(torch.tensor(0.3))   # Spatial attention weight
     
     def forward(self, x):
-        # 通道注意力：y = x * s_c + x（残差）
+        # Channel attention: y = x * s_c + x (residual)
         s_c = self.channel_attention(x)
-        channel_refined = x * s_c + x  # 残差连接
+        channel_refined = x * s_c + x  # Residual connection
         
-        # 空间注意力：同样残差
+        # Spatial attention: also residual
         s_s = self.spatial_attention(channel_refined)
         spatial_refined = channel_refined * s_s + channel_refined
         
-        # 最终残差融合，防止过度调制
+        # Final residual fusion to prevent over-modulation
         return self.alpha * spatial_refined + (1 - self.alpha) * x
 
 
 class BranchGating(nn.Module):
-    """分支级门控机制"""
+    """Branch-level gating mechanism"""
     def __init__(self, feature_dim=512):
         super(BranchGating, self).__init__()
         
-        # 分支重要性评估
+        # Branch importance evaluation
         self.branch_evaluator = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(feature_dim * 2, feature_dim, 1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(feature_dim, 2, 1),  # 输出两个分支的权重
+            nn.Conv2d(feature_dim, 2, 1),  # Output weights for two branches
             nn.Softmax(dim=1)
         )
         
-        # 分支特征增强
+        # Branch feature enhancement
         self.branch_enhancer = nn.ModuleDict({
             'inception': nn.Sequential(
                 nn.Conv2d(feature_dim, feature_dim, 3, padding=1),
@@ -527,15 +527,15 @@ class BranchGating(nn.Module):
         })
     
     def forward(self, f_inception, f_efficientnet):
-        # 评估分支重要性
+        # Evaluate branch importance
         combined = torch.cat([f_inception, f_efficientnet], dim=1)
         branch_weights = self.branch_evaluator(combined)  # [B, 2, 1, 1]
         
-        # 增强各分支特征
+        # Enhance each branch feature
         enhanced_inception = self.branch_enhancer['inception'](f_inception)
         enhanced_efficientnet = self.branch_enhancer['efficientnet'](f_efficientnet)
         
-        # 门控融合
+        # Gated fusion
         gated_inception = enhanced_inception * branch_weights[:, 0:1]
         gated_efficientnet = enhanced_efficientnet * branch_weights[:, 1:2]
         
