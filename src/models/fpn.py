@@ -3,11 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class FPN(nn.Module):
+    """特征金字塔网络"""
     def __init__(self, in_channels_list, out_channels):
         super(FPN, self).__init__()
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
-
+        
+        # 添加BatchNorm和ReLU
         for in_channels in in_channels_list:
             lateral_conv = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, 1),
@@ -21,23 +23,31 @@ class FPN(nn.Module):
             )
             self.lateral_convs.append(lateral_conv)
             self.fpn_convs.append(fpn_conv)
-
+            
     def forward(self, features):
-
+        """
+        Args:
+            features: 自底向上的特征图列表，从浅到深排列
+        Returns:
+            results: 增强后的多尺度特征图列表
+        """
+        # 检查输入
         if len(features) != len(self.lateral_convs):
             raise ValueError(f'Expected {len(self.lateral_convs)} features, but got {len(features)}')
-
+        
+        # 转换特征维度
         laterals = []
         for i, (feature, lateral_conv) in enumerate(zip(features, self.lateral_convs)):
-
+            # 确保特征图尺寸正确
             if feature.dim() != 4:
                 raise ValueError(f'Feature {i} expected 4D tensor, but got {feature.dim()}D')
             if feature.size(1) != lateral_conv[0].in_channels:
                 raise ValueError(f'Feature {i} expected {lateral_conv[0].in_channels} channels, but got {feature.size(1)}')
             laterals.append(lateral_conv(feature))
-
+        
+        # 自顶向下的路径
         for i in range(len(laterals) - 1, 0, -1):
-
+            # 上采样前检查特征图大小
             if laterals[i].shape[-2:] != laterals[i-1].shape[-2:]:
                 laterals[i - 1] = laterals[i - 1] + F.interpolate(
                     laterals[i],
@@ -47,14 +57,16 @@ class FPN(nn.Module):
                 )
             else:
                 laterals[i - 1] = laterals[i - 1] + laterals[i]
-
+            
+        # 最后的卷积
         results = []
         for lateral, fpn_conv in zip(laterals, self.fpn_convs):
             results.append(fpn_conv(lateral))
-
+        
         return results
 
 class FeatureFusion(nn.Module):
+    """特征融合模块"""
     def __init__(self, channels):
         super(FeatureFusion, self).__init__()
         self.conv1 = nn.Sequential(
@@ -67,9 +79,9 @@ class FeatureFusion(nn.Module):
             nn.BatchNorm2d(channels),
             nn.ReLU(inplace=True)
         )
-
+        
     def forward(self, x1, x2):
-
+        # 确保特征图大小一致
         if x1.shape[-2:] != x2.shape[-2:]:
             x2 = F.interpolate(
                 x2,
@@ -77,7 +89,8 @@ class FeatureFusion(nn.Module):
                 mode='bilinear',
                 align_corners=True
             )
-
+        
+        # 连接并融合特征
         x = torch.cat([x1, x2], dim=1)
         x = self.conv1(x)
         x = self.conv2(x)
