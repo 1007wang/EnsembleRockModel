@@ -26,7 +26,6 @@ from torchvision import transforms
 from PIL import Image
 import numpy as np
 
-# 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
@@ -356,7 +355,6 @@ def evaluate_model(model, dataloader, device, class_mapping):
                 }
                 predictions_detail.append(pred_detail)
                 
-                # 实时输出每个样本的预测结果到控制台
                 status = "[OK]" if is_correct else "[X]"
                 current_acc = correct_count / sample_idx * 100
                 print(f"\n[{sample_idx}/{total_samples}] {status}")

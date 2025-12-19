@@ -280,7 +280,7 @@ class EnsembleModel(nn.Module):
         # Branch-level gating
         self.branch_gating = BranchGating(feature_dim=512)
         
-        # 🔥 Stage 1 improvement: Use residual feature fusion
+        # Stage 1: Use residual feature fusion
         self.feature_fusion = ResidualFeatureFusion(feature_dim=512)
         # Original: self.feature_fusion = AdaptiveFeatureFusion(feature_dim=512, fusion_type='weighted')
         
