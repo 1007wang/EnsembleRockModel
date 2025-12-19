@@ -36,7 +36,10 @@ def setup_matplotlib():
         
         # Check if Chinese fonts were successfully set
         fonts = [f.name for f in fm.fontManager.ttflist]
-        chinese_fonts = [f for f in fonts if '黑体' in f or '雅黑' in f or 'SimSun' in f or 'SimHei' in f]
+        chinese_fonts = [
+            f for f in fonts
+            if any(name in f for name in ['SimHei', 'Microsoft YaHei', 'SimSun'])
+        ]
         
         if not chinese_fonts:
             # If no Chinese fonts found, use English

@@ -7,7 +7,6 @@ import os
 import json
 from PIL import Image
 import numpy as np
-from sklearn.model_selection import train_test_split
 from collections import defaultdict
 
 class FocalLossWithLabelSmoothing(nn.Module):
